@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAYX-CLAW // Autonomous Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link href="/static/persona-manager.css" rel="stylesheet">
+  <style>
+    :root {
+      --neon-pink: #ff2d95;
+      --neon-cyan: #00f0ff;
+      --neon-purple: #b829ff;
+      --neon-green: #39ff14;
+      --neon-amber: #ffaa00;
+      --neon-red: #ff003c;
+      --bg-dark: #0a0a0f;
+      --bg-panel: #0d0d14;
+      --bg-card: #111119;
+      --border-dim: #1a1a2e;
+      --text-dim: #4a4a6a;
+      --text-mid: #8888aa;
+      --text-bright: #e0e0f0;
+    }
+
+    body {
+      font-family: 'Share Tech Mono', 'Fira Code', monospace;
+      background: var(--bg-dark);
+      color: var(--text-bright);
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        transparent, transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .glow-pink  { text-shadow: 0 0 8px var(--neon-pink), 0 0 20px rgba(255,45,149,0.3); }
+    .glow-cyan  { text-shadow: 0 0 8px var(--neon-cyan), 0 0 20px rgba(0,240,255,0.3); }
+    .glow-green { text-shadow: 0 0 8px var(--neon-green), 0 0 20px rgba(57,255,20,0.3); }
+
+    .border-glow-cyan { border-color: var(--neon-cyan); box-shadow: 0 0 6px rgba(0,240,255,0.2); }
+
+    .agent-minimax { border-left: 2px solid var(--neon-cyan); }
+    .agent-system  { border-left: 2px solid var(--text-dim); }
+    .agent-user    { border-left: 2px solid var(--neon-green); }
+
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+
+    pre { tab-size: 4; }
+
+    .badge {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+    .badge-minimax {
+      background: rgba(0,240,255,0.1);
+      color: var(--neon-cyan);
+      border-color: rgba(0,240,255,0.4);
+    }
+    .badge-system {
+      background: rgba(74,74,106,0.2);
+      color: var(--text-dim);
+      border-color: rgba(74,74,106,0.3);
+    }
+    .badge-user {
+      background: rgba(57,255,20,0.1);
+      color: var(--neon-green);
+      border-color: rgba(57,255,20,0.4);
+    }
+    .badge-tool {
+      background: rgba(255,170,0,0.1);
+      color: var(--neon-amber);
+      border-color: rgba(255,170,0,0.4);
+    }
+    .badge-subagent {
+      background: rgba(184,41,255,0.1);
+      color: var(--neon-purple);
+      border-color: rgba(184,41,255,0.4);
+    }
+
+    .exchange-group {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-dim);
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+    }
+    .exchange-group:first-child { border-bottom: none; }
+
+    .msg-card {
+      background: var(--bg-card);
+      border-radius: 3px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .tool-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      transition: all 0.3s;
+    }
+    .tool-dot.on  {
+      background: var(--neon-green);
+      box-shadow: 0 0 6px var(--neon-green), 0 0 12px rgba(57,255,20,0.3);
+    }
+    .tool-dot.off {
+      background: var(--neon-red);
+      box-shadow: 0 0 6px var(--neon-red), 0 0 12px rgba(255,0,60,0.3);
+    }
+    .tool-dot.unknown { background: var(--text-dim); }
+
+    .cyber-input {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      color: var(--text-bright);
+      font-family: 'Share Tech Mono', monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .cyber-input:focus {
+      outline: none;
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 8px rgba(0,240,255,0.2);
+    }
+    .cyber-input::placeholder { color: var(--text-dim); }
+
+    .cyber-btn {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--neon-cyan);
+      color: var(--neon-cyan);
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+    .cyber-btn:hover {
+      background: rgba(0,240,255,0.1);
+      box-shadow: 0 0 12px rgba(0,240,255,0.3);
+    }
+    .cyber-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .cyber-btn-stop {
+      border-color: var(--neon-red);
+      color: var(--neon-red);
+    }
+    .cyber-btn-stop:hover {
+      background: rgba(255,0,60,0.15);
+      box-shadow: 0 0 12px rgba(255,0,60,0.4);
+    }
+    .cyber-btn-pause {
+      border-color: var(--neon-amber);
+      color: var(--neon-amber);
+    }
+    .cyber-btn-pause:hover {
+      background: rgba(255,170,0,0.15);
+      box-shadow: 0 0 12px rgba(255,170,0,0.4);
+    }
+    .cyber-btn-resume {
+      border-color: var(--neon-green);
+      color: var(--neon-green);
+    }
+    .cyber-btn-resume:hover {
+      background: rgba(57,255,20,0.15);
+      box-shadow: 0 0 12px rgba(57,255,20,0.4);
+    }
+
+    .spinner { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .neon-border-b {
+      border-bottom: 1px solid transparent;
+      border-image: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink)) 1;
+    }
+    .dim-border-b { border-bottom: 1px solid var(--border-dim); }
+
+    /* Progress panel */
+    .progress-panel {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-dim);
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      overflow: hidden;
+    }
+    .progress-panel.hidden { max-height: 0; opacity: 0; padding: 0; }
+    .progress-panel.visible { max-height: 400px; opacity: 1; }
+
+    .progress-goal {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      color: var(--neon-cyan);
+    }
+    .progress-round {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.55rem;
+      letter-spacing: 0.1em;
+      color: var(--neon-amber);
+    }
+    .progress-note {
+      font-size: 0.75rem;
+      color: var(--text-mid);
+      border-left: 2px solid var(--neon-cyan);
+      padding-left: 8px;
+      margin: 2px 0;
+    }
+
+    .subagent-card {
+      background: rgba(184,41,255,0.05);
+      border: 1px solid rgba(184,41,255,0.2);
+      border-radius: 3px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .subagent-card .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--neon-purple);
+      box-shadow: 0 0 4px var(--neon-purple);
+    }
+    .subagent-card.done .dot {
+      background: var(--neon-green);
+      box-shadow: 0 0 4px var(--neon-green);
+    }
+
+    /* Settings panel */
+    .settings-panel {
+      transition: max-height 0.2s ease, opacity 0.2s ease;
+      overflow: hidden;
+    }
+    .settings-panel.closed { max-height: 0; opacity: 0; }
+    .settings-panel.open { max-height: 300px; opacity: 1; }
+
+    /* Status badges in progress */
+    .status-running {
+      color: var(--neon-cyan);
+      border-color: rgba(0,240,255,0.4);
+    }
+    .status-paused {
+      color: var(--neon-amber);
+      border-color: rgba(255,170,0,0.4);
+    }
+    .status-completed {
+      color: var(--neon-green);
+      border-color: rgba(57,255,20,0.4);
+    }
+    .status-cancelled {
+      color: var(--neon-red);
+      border-color: rgba(255,0,60,0.4);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="neon-border-b px-6 py-3 flex items-center justify-between shrink-0" style="background: var(--bg-panel)">
+    <div class="flex items-center gap-3">
+      <h1 id="header-title" class="text-sm font-black tracking-widest glow-cyan" style="font-family:'Orbitron',monospace">SOPHIA</h1>
+      <span class="text-xs" style="color: var(--text-dim)">// AUTONOMOUS AGENT</span>
+      <span class="badge badge-minimax">MINIMAX M2.5</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div id="tool-indicators" class="flex items-center gap-2"></div>
+      <div class="flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full" style="background: var(--text-dim)"></span>
+        <span id="status-text" class="text-xs" style="color: var(--text-dim)">CONNECTING...</span>
+      </div>
+      <button id="settings-toggle" class="transition-colors" style="color: var(--text-dim)" title="Settings">
+        <svg class="w-4 h-4 hover:drop-shadow-[0_0_6px_rgba(0,240,255,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transition: filter 0.2s">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Settings panel (collapsible) -->
+  <div id="settings-panel" class="settings-panel closed dim-border-b" style="background: var(--bg-panel)">
+    <div class="px-6 py-4 max-w-4xl mx-auto flex flex-col gap-3">
+      <div class="flex items-center gap-4">
+        <label class="text-xs" style="color: var(--text-dim); font-family:'Orbitron',monospace; font-size:0.6rem; letter-spacing:0.1em; min-width:70px">PERSONA</label>
+        <span id="active-persona-name" class="badge badge-minimax"></span>
+        <button id="persona-manager-btn" class="cyber-btn px-3 py-1 rounded text-xs">MANAGE</button>
+        <span id="persona-status" class="text-xs" style="color: var(--neon-green)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Persona Manager Panel -->
+  <div id="persona-panel" class="persona-panel closed" style="background: var(--bg-panel)">
+    <div class="px-6 py-4">
+      <!-- Grid view -->
+      <div id="persona-grid-view">
+        <div class="panel-header">
+          <span class="panel-title">PERSONAS</span>
+          <button id="persona-close-btn" class="btn-back">CLOSE</button>
+        </div>
+        <div id="persona-grid" class="persona-grid"></div>
+      </div>
+      <!-- Editor view -->
+      <div id="persona-editor-view" class="hidden">
+        <div class="panel-header">
+          <button id="persona-back-btn" class="btn-back">BACK</button>
+          <span id="persona-editor-title" class="panel-title">NEW PERSONA</span>
+          <div style="width:60px"></div>
+        </div>
+        <div class="persona-editor">
+          <div class="editor-tabs">
+            <button class="editor-tab active" data-tab="identity">Identity</button>
+            <button class="editor-tab" data-tab="personality">Personality</button>
+            <button class="editor-tab" data-tab="role">Role</button>
+            <button class="editor-tab" data-tab="guardrails">Guardrails</button>
+            <button class="editor-tab" data-tab="ui">UI</button>
+          </div>
+          <div id="tab-identity" class="tab-content active">
+            <div class="field-group">
+              <label class="field-label">Name</label>
+              <input type="text" id="p-name" class="field-input" placeholder="e.g., Sophia">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Tagline</label>
+              <input type="text" id="p-tagline" class="field-input" placeholder="e.g., Autonomous AI orchestrator">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Greeting</label>
+              <input type="text" id="p-greeting" class="field-input" placeholder="e.g., Hey! I'm Sophia.">
+            </div>
+          </div>
+          <div id="tab-personality" class="tab-content">
+            <div class="field-group">
+              <label class="field-label">Tone</label>
+              <input type="text" id="p-tone" class="field-input" placeholder="e.g., professional yet approachable">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Style</label>
+              <input type="text" id="p-style" class="field-input" placeholder="e.g., concise and direct">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Traits (one per line)</label>
+              <textarea id="p-traits" class="field-input" placeholder="e.g.,&#10;- Helpful and proactive&#10;- Plans before executing"></textarea>
+            </div>
+          </div>
+          <div id="tab-role" class="tab-content">
+            <div class="field-group">
+              <label class="field-label">Description</label>
+              <textarea id="p-role-desc" class="field-input" placeholder="You are a capable AI assistant..."></textarea>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Instructions (one per line)</label>
+              <textarea id="p-instructions" class="field-input" placeholder="e.g.,&#10;- Delegate tasks to sub-agents&#10;- Verify output before presenting"></textarea>
+            </div>
+          </div>
+          <div id="tab-guardrails" class="tab-content">
+            <div class="field-group">
+              <label class="field-label">Do (one per line)</label>
+              <textarea id="p-guardrails-do" class="field-input" placeholder="e.g.,&#10;- Verify agent output&#10;- Save context to memory"></textarea>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Don't (one per line)</label>
+              <textarea id="p-guardrails-dont" class="field-input" placeholder="e.g.,&#10;- Expose API keys&#10;- Make up information"></textarea>
+            </div>
+          </div>
+          <div id="tab-ui" class="tab-content">
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label">Avatar Emoji</label>
+                <input type="text" id="p-avatar-emoji" class="field-input" placeholder="🤖">
+              </div>
+              <div class="field-group">
+                <label class="field-label">Primary Color</label>
+                <input type="text" id="p-primary-color" class="field-input" placeholder="#00f0ff">
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Theme</label>
+              <select id="p-theme" class="field-input">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <button id="persona-activate-btn" class="btn-save btn-activate">ACTIVATE</button>
+            <button id="persona-save-btn" class="btn-save">SAVE</button>
+            <button id="persona-delete-btn" class="btn-save btn-danger hidden">DELETE</button>
+            <span id="persona-editor-status" class="status-msg"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autonomous Progress Panel -->
+  <div id="progress-panel" class="progress-panel hidden">
+    <div class="px-6 py-3 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div id="progress-spinner" class="spinner w-3 h-3 border border-t-transparent rounded-full hidden" style="border-color: var(--neon-cyan); border-top-color: transparent"></div>
+          <span id="progress-status" class="badge badge-minimax">IDLE</span>
+          <span id="progress-goal" class="progress-goal"></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="progress-round" class="progress-round"></span>
+          <button id="pause-btn" class="cyber-btn cyber-btn-pause px-3 py-1 rounded text-xs hidden">PAUSE</button>
+          <button id="resume-btn" class="cyber-btn cyber-btn-resume px-3 py-1 rounded text-xs hidden">RESUME</button>
+          <button id="cancel-btn" class="cyber-btn cyber-btn-stop px-3 py-1 rounded text-xs hidden">CANCEL</button>
+        </div>
+      </div>
+      <!-- Sub-agent cards -->
+      <div id="subagent-cards" class="flex flex-wrap gap-2"></div>
+      <!-- Progress notes (last 5) -->
+      <div id="progress-notes" class="flex flex-col gap-1 max-h-24 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- Input (always active) -->
+  <div class="dim-border-b p-4 shrink-0" style="background: var(--bg-panel)">
+    <form id="form" class="flex gap-3 max-w-4xl mx-auto">
+      <input id="input" type="text" placeholder="// ENTER TASK OR MESSAGE..."
+             autocomplete="off"
+             class="cyber-input flex-1 rounded px-4 py-2.5 text-sm">
+      <button id="send-btn" type="submit" class="cyber-btn px-6 py-2.5 rounded">
+        EXEC
+      </button>
+    </form>
+  </div>
+
+  <!-- Activity indicator -->
+  <div id="activity-bar" class="hidden dim-border-b px-6 py-2 shrink-0" style="background: rgba(0,240,255,0.03)">
+    <div class="flex items-center gap-2">
+      <div class="spinner w-3 h-3 border border-t-transparent rounded-full" style="border-color: var(--neon-cyan); border-top-color: transparent"></div>
+      <span id="activity-text" class="text-xs" style="color: var(--neon-cyan); font-family:'Orbitron',monospace; font-size:0.6rem; letter-spacing:0.08em"></span>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <main id="messages" class="flex-1 overflow-y-auto px-6 py-4">
+    <div id="placeholder" class="text-center text-xs py-12" style="color: var(--text-dim)">
+      <div style="font-family:'Orbitron',monospace; font-size:0.65rem; letter-spacing:0.15em; margin-bottom:0.5rem" class="glow-cyan">AUTONOMOUS AGENT READY</div>
+      <div>MiniMax M2.5 orchestrator online. Enter a task — the agent will plan, execute, and complete it autonomously.</div>
+      <div style="margin-top:0.5rem; color: var(--text-dim)">You can send messages at any time to guide the agent mid-execution.</div>
+    </div>
+  </main>
+
+  <script>
+    const messagesEl   = document.getElementById('messages');
+    const placeholder  = document.getElementById('placeholder');
+    const form         = document.getElementById('form');
+    const input        = document.getElementById('input');
+    const sendBtn      = document.getElementById('send-btn');
+    const statusDot    = document.getElementById('status-dot');
+    const statusText   = document.getElementById('status-text');
+    const activityBar  = document.getElementById('activity-bar');
+    const activityText = document.getElementById('activity-text');
+    const headerTitle  = document.getElementById('header-title');
+    const toolIndicators = document.getElementById('tool-indicators');
+    const settingsToggle = document.getElementById('settings-toggle');
+    const settingsPanel  = document.getElementById('settings-panel');
+    const personaStatus  = document.getElementById('persona-status');
+    const activePersonaNameEl = document.getElementById('active-persona-name');
+
+    // Progress panel elements
+    const progressPanel   = document.getElementById('progress-panel');
+    const progressSpinner = document.getElementById('progress-spinner');
+    const progressStatus  = document.getElementById('progress-status');
+    const progressGoal    = document.getElementById('progress-goal');
+    const progressRound   = document.getElementById('progress-round');
+    const progressNotes   = document.getElementById('progress-notes');
+    const subagentCards   = document.getElementById('subagent-cards');
+    const pauseBtn        = document.getElementById('pause-btn');
+    const resumeBtn       = document.getElementById('resume-btn');
+    const cancelBtn       = document.getElementById('cancel-btn');
+
+    let personaName = 'Sophia';
+    let personaColor = '#00f0ff';
+    let personaEmoji = '';
+
+    const AGENTS = {
+      user:    { label: () => 'You',        badgeClass: 'badge-user',    borderClass: 'agent-user'    },
+      minimax: { label: () => personaName,   badgeClass: 'badge-minimax', borderClass: 'agent-minimax' },
+      system:  { label: () => 'System',      badgeClass: 'badge-system',  borderClass: 'agent-system'  },
+    };
+
+    let ws = null;
+    let currentGroup = null;
+    const activeBubbles = new Map();
+    const knownSubagents = new Map();
+
+    // Persona manager state
+    let personas = [];
+    let activePersonaId = 'default';
+    let editingPersonaId = null;
+
+    const personaPanel = document.getElementById('persona-panel');
+    const personaGridView = document.getElementById('persona-grid-view');
+    const personaEditorView = document.getElementById('persona-editor-view');
+    const personaGrid = document.getElementById('persona-grid');
+    const personaManagerBtn = document.getElementById('persona-manager-btn');
+    const personaCloseBtn = document.getElementById('persona-close-btn');
+    const personaBackBtn = document.getElementById('persona-back-btn');
+    const personaEditorTitle = document.getElementById('persona-editor-title');
+    const personaActivateBtn = document.getElementById('persona-activate-btn');
+    const personaSaveBtn = document.getElementById('persona-save-btn');
+    const personaDeleteBtn = document.getElementById('persona-delete-btn');
+    const personaEditorStatus = document.getElementById('persona-editor-status');
+
+    /* ---- Seamless Persona Application ---- */
+
+    function applyPersona(info) {
+      personaName = info.name || personaName;
+      personaColor = info.primary_color || personaColor;
+      personaEmoji = info.avatar_emoji || '';
+
+      // Update header
+      headerTitle.textContent = personaName.toUpperCase();
+
+      // Update active badge in settings
+      activePersonaNameEl.textContent = (personaEmoji ? personaEmoji + ' ' : '') + personaName;
+
+      // Update CSS custom property for accent color
+      document.documentElement.style.setProperty('--neon-cyan', personaColor);
+
+      // Update page title
+      document.title = `${personaName.toUpperCase()} // Autonomous Agent`;
+    }
+
+    /* ---- Settings Panel ---- */
+
+    settingsToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      settingsPanel.classList.toggle('closed');
+      settingsPanel.classList.toggle('open');
+    });
+
+    /* ---- Persona Manager ---- */
+
+    // Tab switching
+    document.querySelectorAll('.editor-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    async function loadPersonas() {
+      try {
+        const r = await fetch('/api/personas');
+        personas = await r.json();
+        activePersonaId = personas.find(p => p.active)?.id || 'default';
+        renderPersonaGrid();
+      } catch (e) {
+        console.error('Failed to load personas:', e);
+      }
+    }
+
+    function renderPersonaGrid() {
+      personaGrid.innerHTML = '';
+      personas.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'persona-card' + (p.id === activePersonaId ? ' active' : '');
+        card.innerHTML = `
+          <span class="emoji">${p.avatar_emoji || ''}</span>
+          <div class="card-name">${p.name}</div>
+          <div class="card-tagline">${p.tagline || ''}</div>
+          ${p.id === activePersonaId ? '<span class="active-badge">ACTIVE</span>' : ''}
+          <span class="color-dot" style="background:${p.primary_color || '#00f0ff'}"></span>
+        `;
+        card.addEventListener('click', () => openPersonaEditor(p.id));
+        personaGrid.appendChild(card);
+      });
+      const newCard = document.createElement('div');
+      newCard.className = 'persona-card persona-card-new';
+      newCard.innerHTML = '<span class="plus">+</span><span class="label">NEW PERSONA</span>';
+      newCard.addEventListener('click', () => openPersonaEditor(null));
+      personaGrid.appendChild(newCard);
+    }
+
+    async function openPersonaEditor(id) {
+      editingPersonaId = id;
+      personaGridView.classList.add('hidden');
+      personaEditorView.classList.remove('hidden');
+
+      if (id) {
+        // Fetch full persona data from API for editing
+        let p;
+        try {
+          const r = await fetch('/api/personas/' + id);
+          p = await r.json();
+        } catch (e) {
+          p = personas.find(x => x.id === id) || {};
+        }
+
+        personaEditorTitle.textContent = 'EDIT: ' + (p.name || id).toUpperCase();
+        personaDeleteBtn.classList.toggle('hidden', id === 'default');
+        personaActivateBtn.classList.remove('hidden');
+
+        document.getElementById('p-name').value = p.name || '';
+        document.getElementById('p-tagline').value = p.tagline || '';
+        document.getElementById('p-greeting').value = p.greeting || '';
+        document.getElementById('p-tone').value = p.personality?.tone || '';
+        document.getElementById('p-style').value = p.personality?.style || '';
+        document.getElementById('p-traits').value = (p.personality?.traits || []).join('\n');
+        document.getElementById('p-role-desc').value = p.role?.description || '';
+        document.getElementById('p-instructions').value = (p.role?.instructions || []).join('\n');
+        document.getElementById('p-guardrails-do').value = (p.guardrails?.do || []).join('\n');
+        document.getElementById('p-guardrails-dont').value = (p.guardrails?.dont || []).join('\n');
+        document.getElementById('p-avatar-emoji').value = p.ui?.avatar_emoji || '';
+        document.getElementById('p-primary-color').value = p.ui?.primary_color || '#00f0ff';
+        document.getElementById('p-theme').value = p.ui?.theme || 'dark';
+      } else {
+        personaEditorTitle.textContent = 'NEW PERSONA';
+        personaDeleteBtn.classList.add('hidden');
+        personaActivateBtn.classList.add('hidden');
+        ['p-name','p-tagline','p-greeting','p-tone','p-style','p-traits','p-role-desc','p-instructions','p-guardrails-do','p-guardrails-dont','p-avatar-emoji','p-primary-color'].forEach(fid => {
+          document.getElementById(fid).value = '';
+        });
+        document.getElementById('p-theme').value = 'dark';
+        document.getElementById('p-primary-color').value = '#00f0ff';
+      }
+      personaEditorStatus.textContent = '';
+    }
+
+    function closePersonaEditor() {
+      editingPersonaId = null;
+      personaEditorView.classList.add('hidden');
+      personaGridView.classList.remove('hidden');
+    }
+
+    function collectPersonaData() {
+      const parseList = (id) => document.getElementById(id).value.split('\n').filter(x => x.trim());
+      return {
+        name: document.getElementById('p-name').value || 'Unnamed',
+        tagline: document.getElementById('p-tagline').value,
+        greeting: document.getElementById('p-greeting').value,
+        personality: {
+          tone: document.getElementById('p-tone').value,
+          style: document.getElementById('p-style').value,
+          traits: parseList('p-traits'),
+        },
+        role: {
+          description: document.getElementById('p-role-desc').value,
+          instructions: parseList('p-instructions'),
+        },
+        guardrails: {
+          do: parseList('p-guardrails-do'),
+          dont: parseList('p-guardrails-dont'),
+        },
+        ui: {
+          avatar_emoji: document.getElementById('p-avatar-emoji').value,
+          primary_color: document.getElementById('p-primary-color').value,
+          theme: document.getElementById('p-theme').value,
+        },
+      };
+    }
+
+    personaManagerBtn.addEventListener('click', () => {
+      personaPanel.classList.toggle('closed');
+      personaPanel.classList.toggle('open');
+      if (personaPanel.classList.contains('open')) {
+        loadPersonas();
+        // Close settings when opening persona manager
+        settingsPanel.classList.add('closed');
+        settingsPanel.classList.remove('open');
+      }
+    });
+
+    personaCloseBtn.addEventListener('click', () => {
+      personaPanel.classList.remove('open');
+      personaPanel.classList.add('closed');
+      closePersonaEditor();
+    });
+
+    personaBackBtn.addEventListener('click', closePersonaEditor);
+
+    // ACTIVATE — seamless via WebSocket
+    personaActivateBtn.addEventListener('click', () => {
+      if (!editingPersonaId) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        personaEditorStatus.textContent = 'NOT CONNECTED';
+        personaEditorStatus.className = 'status-msg error';
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'switch_persona', content: editingPersonaId }));
+      activePersonaId = editingPersonaId;
+
+      // Immediately apply from form fields (instant feel)
+      applyPersona({
+        name: document.getElementById('p-name').value,
+        primary_color: document.getElementById('p-primary-color').value,
+        avatar_emoji: document.getElementById('p-avatar-emoji').value,
+      });
+
+      personaEditorStatus.textContent = 'ACTIVATED';
+      personaEditorStatus.className = 'status-msg success';
+      setTimeout(() => { personaEditorStatus.textContent = ''; }, 2000);
+
+      // Refresh grid to show new active state
+      loadPersonas();
+    });
+
+    personaSaveBtn.addEventListener('click', async () => {
+      const data = collectPersonaData();
+      try {
+        let r;
+        if (editingPersonaId) {
+          r = await fetch('/api/personas/' + editingPersonaId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+        } else {
+          const newId = data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+          r = await fetch('/api/personas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: newId, ...data }),
+          });
+        }
+        if (r.ok) {
+          personaEditorStatus.textContent = 'SAVED';
+          personaEditorStatus.className = 'status-msg success';
+          loadPersonas();
+          if (!editingPersonaId) {
+            const result = await r.json();
+            openPersonaEditor(result.id);
+          }
+          // If saved persona is the active one, re-apply it live
+          if (editingPersonaId === activePersonaId) {
+            applyPersona({
+              name: data.name,
+              primary_color: data.ui.primary_color,
+              avatar_emoji: data.ui.avatar_emoji,
+            });
+            // Also tell server to reload the persona
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'switch_persona', content: editingPersonaId }));
+            }
+          }
+          setTimeout(() => { personaEditorStatus.textContent = ''; }, 2000);
+        } else {
+          const err = await r.json();
+          personaEditorStatus.textContent = err.detail || 'ERROR';
+          personaEditorStatus.className = 'status-msg error';
+        }
+      } catch (e) {
+        personaEditorStatus.textContent = 'ERROR';
+        personaEditorStatus.className = 'status-msg error';
+      }
+    });
+
+    personaDeleteBtn.addEventListener('click', async () => {
+      if (!editingPersonaId || editingPersonaId === 'default') return;
+      if (!confirm('Delete this persona?')) return;
+      try {
+        const r = await fetch('/api/personas/' + editingPersonaId, { method: 'DELETE' });
+        if (r.ok) {
+          closePersonaEditor();
+          loadPersonas();
+        }
+      } catch (e) {
+        personaEditorStatus.textContent = 'DELETE ERROR';
+        personaEditorStatus.className = 'status-msg error';
+      }
+    });
+
+    /* ---- Progress Panel ---- */
+
+    function updateTaskState(state) {
+      if (!state) return;
+
+      const isActive = ['running', 'paused'].includes(state.status);
+      progressPanel.classList.toggle('hidden', !isActive && state.status !== 'completed');
+      progressPanel.classList.toggle('visible', isActive || state.status === 'completed');
+
+      progressStatus.textContent = state.status.toUpperCase();
+      progressStatus.className = 'badge';
+      if (state.status === 'running') {
+        progressStatus.classList.add('status-running');
+        progressSpinner.classList.remove('hidden');
+      } else {
+        progressSpinner.classList.add('hidden');
+        if (state.status === 'paused') progressStatus.classList.add('status-paused');
+        else if (state.status === 'completed') progressStatus.classList.add('status-completed');
+        else if (state.status === 'cancelled') progressStatus.classList.add('status-cancelled');
+      }
+
+      progressGoal.textContent = state.current_goal || '';
+
+      if (state.round_number > 0) {
+        progressRound.textContent = `ROUND ${state.round_number}`;
+      }
+
+      pauseBtn.classList.toggle('hidden', state.status !== 'running');
+      resumeBtn.classList.toggle('hidden', state.status !== 'paused');
+      cancelBtn.classList.toggle('hidden', !isActive);
+
+      if (state.subagents_active && state.subagents_active.length > 0) {
+        state.subagents_active.forEach(id => {
+          if (!knownSubagents.has(id)) knownSubagents.set(id, 'running');
+        });
+      }
+      renderSubagentCards();
+
+      if (state.progress_notes) {
+        const recent = state.progress_notes.slice(-5);
+        progressNotes.innerHTML = recent.map(n =>
+          `<div class="progress-note">${escapeHtml(n)}</div>`
+        ).join('');
+      }
+    }
+
+    function renderSubagentCards() {
+      subagentCards.innerHTML = '';
+      knownSubagents.forEach((status, id) => {
+        const card = document.createElement('div');
+        card.className = `subagent-card ${status === 'completed' ? 'done' : ''}`;
+        card.innerHTML = `<span class="dot"></span><span>${id}</span>`;
+        subagentCards.appendChild(card);
+      });
+    }
+
+    /* ---- Control Buttons ---- */
+
+    pauseBtn.addEventListener('click', () => {
+      if (ws) ws.send(JSON.stringify({ type: 'pause' }));
+    });
+
+    resumeBtn.addEventListener('click', () => {
+      if (ws) ws.send(JSON.stringify({ type: 'resume' }));
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      if (ws) ws.send(JSON.stringify({ type: 'cancel' }));
+    });
+
+    /* ---- WebSocket ---- */
+
+    async function fetchPersona() {
+      try {
+        const r = await fetch('/api/personas/active');
+        const data = await r.json();
+        activePersonaId = data.id || 'default';
+        applyPersona(data);
+      } catch (e) {
+        console.error('Failed to fetch persona:', e);
+      }
+    }
+
+    async function fetchStatus() {
+      try {
+        const r = await fetch('/api/status');
+        const statuses = await r.json();
+        toolIndicators.innerHTML = '';
+        for (const [key, info] of Object.entries(statuses)) {
+          const dot = document.createElement('div');
+          dot.className = `tool-dot ${info.ok ? 'on' : 'off'}`;
+          dot.title = info.desc;
+          toolIndicators.appendChild(dot);
+        }
+      } catch (e) {
+        console.error('Failed to fetch status:', e);
+      }
+    }
+
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.onopen = () => {
+        statusDot.style.background = 'var(--neon-green)';
+        statusText.textContent = 'CONNECTED';
+        statusText.style.color = 'var(--neon-green)';
+      };
+
+      ws.onclose = () => {
+        statusDot.style.background = 'var(--neon-red)';
+        statusText.textContent = 'DISCONNECTED';
+        statusText.style.color = 'var(--neon-red)';
+        ws = null;
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (e) => {
+        console.error('WebSocket error:', e);
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        handleWSMessage(msg);
+      };
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function handleWSMessage(msg) {
+      if (msg.type === 'history') {
+        placeholder.remove();
+        messagesEl.innerHTML = '';
+        for (const exchange of msg.history) {
+          addMessage({ agent: 'user', content: exchange.user });
+          if (typeof exchange.assistant === 'string') {
+            addMessage({ agent: 'minimax', content: exchange.assistant });
+          }
+        }
+        return;
+      }
+
+      if (msg.type === 'task_state') {
+        updateTaskState(msg.task_state);
+        return;
+      }
+
+      if (msg.type === 'progress') {
+        updateTaskState(msg.task_state);
+        return;
+      }
+
+      if (msg.type === 'persona_update') {
+        // Server confirmed persona switch — apply it
+        try {
+          const info = JSON.parse(msg.content);
+          applyPersona(info);
+        } catch (e) {
+          console.error('Failed to parse persona_update:', e);
+        }
+        return;
+      }
+
+      if (msg.type === 'subagent_event') {
+        const [action, agentId] = msg.content.split(':');
+        if (action === 'spawned') knownSubagents.set(agentId, 'running');
+        else if (action === 'completed') knownSubagents.set(agentId, 'completed');
+        renderSubagentCards();
+        return;
+      }
+
+      const agent = msg.agent || 'system';
+
+      if (msg.type === 'status') {
+        activityBar.classList.remove('hidden');
+        activityText.textContent = msg.content;
+        return;
+      }
+
+      if (msg.type === 'chunk' || msg.type === 'stream') {
+        const bubbleKey = msg.tool_name ? `sub:${msg.tool_name}` : agent;
+        let bubble = activeBubbles.get(bubbleKey);
+        if (!bubble) {
+          const badgeLabel = msg.tool_name ? `SUB: ${msg.tool_name}` : undefined;
+          bubble = createBubble(agent, badgeLabel);
+          activeBubbles.set(bubbleKey, bubble);
+        }
+        const content = bubble.querySelector('.msg-content');
+        content.textContent += msg.content;
+        content.scrollTop = content.scrollHeight;
+        return;
+      }
+
+      if (msg.type === 'tool_use') {
+        const toolName = msg.tool_name || 'unknown';
+        const inputStr = msg.tool_input ? JSON.stringify(msg.tool_input, null, 2) : '';
+        const truncInput = inputStr.length > 300 ? inputStr.slice(0, 300) + '...' : inputStr;
+        addMessage({
+          agent: 'system',
+          content: `[TOOL] ${toolName}\n${truncInput}`,
+          badgeClass: 'badge-tool',
+          badgeLabel: 'TOOL',
+        });
+        return;
+      }
+
+      if (msg.type === 'tool_result') {
+        const toolName = msg.tool_name || '';
+        const prefix = toolName ? `[${toolName}] ` : '';
+        addMessage({
+          agent: 'system',
+          content: prefix + (msg.content || ''),
+          badgeClass: 'badge-system',
+          badgeLabel: 'RESULT',
+        });
+        return;
+      }
+
+      if (msg.type === 'done') {
+        activityBar.classList.add('hidden');
+        activeBubbles.clear();
+        knownSubagents.clear();
+        return;
+      }
+
+      if (msg.type === 'error') {
+        addMessage({ agent: 'system', content: `ERROR: ${msg.content}` });
+        return;
+      }
+
+      if (msg.type === 'message' && msg.content) {
+        addMessage({ agent, content: msg.content });
+        return;
+      }
+    }
+
+    function createBubble(agent, customLabel) {
+      const cfg = AGENTS[agent] || AGENTS.system;
+      const bubble = document.createElement('div');
+      bubble.className = `msg-card ${cfg.borderClass}`;
+
+      const label = customLabel || cfg.label();
+      const badgeClass = customLabel ? 'badge-subagent' : cfg.badgeClass;
+
+      bubble.innerHTML = `
+        <div class="flex items-center gap-2 mb-1">
+          <span class="badge ${badgeClass}">${label}</span>
+        </div>
+        <div class="msg-content text-sm" style="white-space:pre-wrap;word-break:break-word"></div>
+      `;
+      if (!currentGroup) {
+        currentGroup = document.createElement('div');
+        currentGroup.className = 'exchange-group';
+        messagesEl.insertBefore(currentGroup, messagesEl.firstChild);
+      }
+      currentGroup.appendChild(bubble);
+      return bubble;
+    }
+
+    function addMessage({ agent, content, badgeClass, badgeLabel }) {
+      const cfg = AGENTS[agent] || AGENTS.system;
+      const bubble = document.createElement('div');
+      bubble.className = `msg-card ${cfg.borderClass}`;
+
+      const bClass = badgeClass || cfg.badgeClass;
+      const bLabel = badgeLabel || cfg.label();
+
+      bubble.innerHTML = `
+        <div class="flex items-center gap-2 mb-1">
+          <span class="badge ${bClass}">${bLabel}</span>
+        </div>
+        <div class="msg-content text-sm" style="white-space:pre-wrap;word-break:break-word">${escapeHtml(content)}</div>
+      `;
+      if (!currentGroup || currentGroup.querySelectorAll('.msg-card').length >= 4) {
+        currentGroup = document.createElement('div');
+        currentGroup.className = 'exchange-group';
+        messagesEl.insertBefore(currentGroup, messagesEl.firstChild);
+      }
+      currentGroup.appendChild(bubble);
+      messagesEl.scrollTop = 0;
+    }
+
+    /* ---- Form Submit (always active, never blocked) ---- */
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      placeholder.remove();
+
+      addMessage({ agent: 'user', content: text });
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'message', content: text }));
+      }
+    });
+
+    /* ---- Init ---- */
+
+    fetchPersona();
+    fetchStatus();
+    connect();
+
+    setInterval(fetchStatus, 30000);
+
+    // Close panels on outside click
+    document.addEventListener('click', (e) => {
+      if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target) && !personaPanel.contains(e.target) && !personaManagerBtn.contains(e.target)) {
+        settingsPanel.classList.add('closed');
+        settingsPanel.classList.remove('open');
+      }
+    });
+  </script>
+</body>
+</html>
