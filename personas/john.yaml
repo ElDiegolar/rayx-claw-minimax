@@ -11,12 +11,6 @@ role:
 guardrails:
   do: []
   dont: []
-voice:
-  enabled: true
-  edge_tts:
-    voice: ''
-  voicebox:
-    profile_id: ''
 ui:
   avatar_emoji: 🤖
   primary_color: '#e94560'
