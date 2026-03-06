@@ -285,7 +285,7 @@ ORCHESTRATOR_TOOL_NAMES = {
 }
 SUBAGENT_TOOL_NAMES = {
     "read_file", "write_file", "list_directory", "search_files", "grep_files",
-    "run_command", "recall_memory",
+    "run_command", "save_memory", "recall_memory", "delete_memory",
 }
 
 ORCHESTRATOR_TOOLS = [t for t in TOOL_DEFINITIONS if t["name"] in ORCHESTRATOR_TOOL_NAMES]

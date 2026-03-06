@@ -9,7 +9,7 @@ from config import Settings
 from minimax_api import stream_and_collect
 from models import Agent, WSMessage
 from rate_limiter import RateLimiter
-from tools import SUBAGENT_TOOLS, execute_tool_async
+from tools import SUBAGENT_TOOLS, execute_tool_async, memory_store
 
 log = logging.getLogger(__name__)
 settings = Settings()
@@ -40,6 +40,14 @@ class SubAgent:
         """Execute a task with tool-use loop. Returns the full text output."""
         if not self.messages and system:
             self._system = system
+
+        # Inject persistent memory context so sub-agents know stored info
+        mem_context = memory_store.get_context()
+        if mem_context:
+            if self._system:
+                self._system += "\n\n" + mem_context
+            else:
+                self._system = mem_context
 
         self.messages.append({"role": "user", "content": prompt})
 
