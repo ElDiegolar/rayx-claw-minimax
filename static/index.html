@@ -592,6 +592,95 @@
     }
 
     /* Sub-agent groups in activity panel */
+    /* Tool groups in activity panel */
+    .tool-group {
+      border: 1px solid rgba(255,170,0,0.2);
+      border-radius: 3px;
+      margin-bottom: 2px;
+    }
+    .tool-group.tool-group-delegation {
+      border-color: rgba(184,41,255,0.2);
+    }
+    .tool-group.tool-group-progress {
+      border-color: rgba(0,240,255,0.2);
+    }
+    .tool-group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: rgba(255,170,0,0.06);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .tool-group.tool-group-delegation .tool-group-header {
+      background: rgba(184,41,255,0.06);
+    }
+    .tool-group.tool-group-progress .tool-group-header {
+      background: rgba(0,240,255,0.06);
+    }
+    .tool-group-header:hover {
+      background: rgba(255,170,0,0.12);
+    }
+    .tool-group.tool-group-delegation .tool-group-header:hover {
+      background: rgba(184,41,255,0.12);
+    }
+    .tool-group.tool-group-progress .tool-group-header:hover {
+      background: rgba(0,240,255,0.12);
+    }
+    .tool-group-header .tg-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--neon-amber);
+      box-shadow: 0 0 4px var(--neon-amber);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    .tool-group.tool-group-delegation .tool-group-header .tg-dot {
+      background: var(--neon-purple);
+      box-shadow: 0 0 4px var(--neon-purple);
+    }
+    .tool-group.tool-group-progress .tool-group-header .tg-dot {
+      background: var(--neon-cyan);
+      box-shadow: 0 0 4px var(--neon-cyan);
+    }
+    .tool-group-header.all-done .tg-dot {
+      background: var(--neon-green);
+      box-shadow: 0 0 4px var(--neon-green);
+      animation: none;
+    }
+    .tool-group-header .tg-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--neon-amber);
+    }
+    .tool-group.tool-group-delegation .tool-group-header .tg-name {
+      color: var(--neon-purple);
+    }
+    .tool-group.tool-group-progress .tool-group-header .tg-name {
+      color: var(--neon-cyan);
+    }
+    .tool-group-header .tg-count {
+      margin-left: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--text-dim);
+    }
+    .tool-group-header .tg-arrow {
+      color: var(--text-dim);
+      font-size: 0.6rem;
+      transition: transform 0.15s;
+    }
+    .tool-group.collapsed .tg-arrow { transform: rotate(-90deg); }
+    .tool-group-body {
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .tool-group.collapsed .tool-group-body { display: none; }
+
     .subagent-group {
       border: 1px solid rgba(184,41,255,0.2);
       border-radius: 3px;
@@ -1494,6 +1583,7 @@
         pendingToolEntries.clear();
         pendingPills.clear();
         bubbleToolGroups.clear();
+        activityToolGroups.clear();
         subagentGroups.clear();
         return;
       }
@@ -1566,6 +1656,10 @@
       allCollapsed = !allCollapsed;
       const btn = document.getElementById('collapse-all-btn');
       btn.textContent = allCollapsed ? 'EXPAND ALL' : 'COLLAPSE ALL';
+      toolFeed.querySelectorAll('.tool-group').forEach(group => {
+        if (allCollapsed) group.classList.add('collapsed');
+        else group.classList.remove('collapsed');
+      });
       toolFeed.querySelectorAll('.tool-entry').forEach(entry => {
         if (allCollapsed) {
           entry.classList.add('collapsed');
@@ -1837,6 +1931,52 @@
       toolFeed.scrollTop = 0;
     }
 
+    // Activity panel tool groups: toolName -> { group, body, header, entries: [entry], doneCount }
+    const activityToolGroups = new Map();
+
+    function getOrCreateActivityToolGroup(toolName) {
+      if (activityToolGroups.has(toolName)) return activityToolGroups.get(toolName);
+
+      const isDelegation = toolName === 'delegate_to_subagent';
+      const isProgress = toolName === 'report_progress' || toolName === 'check_subagents';
+
+      const group = document.createElement('div');
+      group.className = `tool-group${isDelegation ? ' tool-group-delegation' : ''}${isProgress ? ' tool-group-progress' : ''}`;
+
+      const header = document.createElement('div');
+      header.className = 'tool-group-header';
+      header.innerHTML = `
+        <span class="tg-dot"></span>
+        <span class="tg-name">${escapeHtml(toolName)}</span>
+        <span class="tg-count">0</span>
+        <span class="tg-arrow">&#9660;</span>
+      `;
+      header.addEventListener('click', () => group.classList.toggle('collapsed'));
+
+      const body = document.createElement('div');
+      body.className = 'tool-group-body';
+
+      group.appendChild(header);
+      group.appendChild(body);
+      toolFeed.prepend(group);
+
+      const data = { group, body, header, entries: [], doneCount: 0 };
+      activityToolGroups.set(toolName, data);
+      return data;
+    }
+
+    function updateActivityGroupStatus(toolName) {
+      const data = activityToolGroups.get(toolName);
+      if (!data) return;
+      const countEl = data.header.querySelector('.tg-count');
+      if (countEl) countEl.textContent = data.entries.length;
+      if (data.doneCount >= data.entries.length && data.entries.length > 0) {
+        data.header.classList.add('all-done');
+      } else {
+        data.header.classList.remove('all-done');
+      }
+    }
+
     function addToolEntry(toolName, toolInput) {
       toolCallCount++;
       toolCountEl.textContent = toolCallCount;
@@ -1858,9 +1998,12 @@
       const dot = document.createElement('div');
       dot.className = 'tool-entry-status';
 
+      const groupData = getOrCreateActivityToolGroup(toolName);
+      const callNum = groupData.entries.length + 1;
+
       const nameSpan = document.createElement('span');
       nameSpan.className = 'tool-entry-name';
-      nameSpan.textContent = toolName;
+      nameSpan.textContent = `#${callNum}`;
 
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'tool-entry-toggle';
@@ -1883,15 +2026,20 @@
         entry.appendChild(inputDiv);
       }
 
-      // If this is a sub-agent tool call, nest it in the group
+      // If this is a sub-agent tool call, nest it in the subagent group instead
       if (isDelegation && toolInput && toolInput.agent_id) {
-        const group = getOrCreateSubagentGroup(toolInput.agent_id);
-        const body = group.querySelector('.subagent-group-body');
-        body.prepend(entry);
+        const saGroup = getOrCreateSubagentGroup(toolInput.agent_id);
+        const saBody = saGroup.querySelector('.subagent-group-body');
+        saBody.prepend(entry);
         updateSubagentGroupCount(toolInput.agent_id);
       } else {
-        toolFeed.prepend(entry);
+        groupData.body.prepend(entry);
+        groupData.entries.push(entry);
+        // Move this tool group to the top of the feed
+        toolFeed.prepend(groupData.group);
+        updateActivityGroupStatus(toolName);
       }
+
       toolFeed.scrollTop = 0;
       pendingToolEntries.set(toolName, entry);
 
@@ -1903,6 +2051,8 @@
     function updateToolResult(toolName, result) {
       let entry = pendingToolEntries.get(toolName);
       if (!entry) {
+        // Orphan result — create a standalone entry in its group
+        const groupData = getOrCreateActivityToolGroup(toolName);
         entry = document.createElement('div');
         entry.className = 'tool-entry clickable';
         if (currentBubbleId) entry.dataset.bubbleId = currentBubbleId;
@@ -1914,9 +2064,10 @@
         const dot = document.createElement('div');
         dot.className = 'tool-entry-status done';
 
+        const callNum = groupData.entries.length + 1;
         const nameSpan = document.createElement('span');
         nameSpan.className = 'tool-entry-name';
-        nameSpan.textContent = toolName || 'RESULT';
+        nameSpan.textContent = `#${callNum}`;
 
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'tool-entry-toggle';
@@ -1931,12 +2082,20 @@
         header.appendChild(nameSpan);
         header.appendChild(toggleBtn);
         entry.appendChild(header);
-        toolFeed.prepend(entry);
+        groupData.body.prepend(entry);
+        groupData.entries.push(entry);
+        groupData.doneCount++;
+        updateActivityGroupStatus(toolName);
+      } else {
+        // Mark as done
+        const dot = entry.querySelector('.tool-entry-status');
+        if (dot) dot.classList.add('done');
+        const groupData = activityToolGroups.get(toolName);
+        if (groupData) {
+          groupData.doneCount++;
+          updateActivityGroupStatus(toolName);
+        }
       }
-
-      // Mark as done
-      const dot = entry.querySelector('.tool-entry-status');
-      if (dot) dot.classList.add('done');
 
       // Add result
       const truncResult = result.length > 500 ? result.slice(0, 500) + '...' : result;
@@ -1950,9 +2109,7 @@
       // Update the command pill in the chat bubble
       const pillData = pendingPills.get(toolName);
       if (pillData) {
-        // Mark individual call item as done
         if (pillData.callItem) pillData.callItem.classList.add('done');
-        // Check if all calls in this group are done
         if (pillData.group) {
           const allDone = pillData.group.calls.every(c => c.item.classList.contains('done'));
           if (allDone) pillData.group.pill.classList.add('all-done');
