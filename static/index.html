@@ -96,7 +96,7 @@
 
     .exchange-group {
       display: flex;
-      flex-direction: column-reverse;
+      flex-direction: column;
       gap: 0.5rem;
       border-bottom: 1px solid var(--border-dim);
       padding-bottom: 1rem;
@@ -226,22 +226,432 @@
     .subagent-card {
       background: rgba(184,41,255,0.05);
       border: 1px solid rgba(184,41,255,0.2);
-      border-radius: 3px;
-      padding: 4px 10px;
+      border-radius: 4px;
+      padding: 6px 10px;
       font-size: 0.7rem;
-      display: inline-flex;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      max-width: 260px;
+    }
+    .subagent-card .indicator {
+      flex-shrink: 0;
+      width: 8px; height: 8px;
+      margin-top: 2px;
+      border-radius: 50%;
+      background: var(--neon-purple);
+      box-shadow: 0 0 6px var(--neon-purple);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    .subagent-card.done .indicator {
+      background: var(--neon-green);
+      box-shadow: 0 0 6px var(--neon-green);
+      animation: none;
+    }
+    .subagent-card .card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .subagent-card .agent-id {
+      font-weight: bold;
+      color: var(--text-bright);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .subagent-card .agent-task {
+      color: var(--text-dim);
+      font-size: 0.65rem;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .subagent-card .agent-tool {
+      color: var(--neon-amber);
+      font-size: 0.6rem;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 0.05em;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Tool Activity Panel */
+    .tool-panel {
+      background: var(--bg-panel);
+      border-left: 1px solid var(--border-dim);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .tool-panel-header {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--neon-amber);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .tool-panel-header .tool-count {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+    .tool-panel-header .collapse-all-btn {
+      background: none;
+      border: 1px solid var(--border-dim);
+      color: var(--text-dim);
+      font-family: 'Orbitron', monospace;
+      font-size: 0.45rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 1px 6px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tool-panel-header .collapse-all-btn:hover {
+      color: var(--neon-amber);
+      border-color: rgba(255,170,0,0.4);
+    }
+    .tool-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .tool-entry.collapsed .tool-entry-input,
+    .tool-entry.collapsed .tool-entry-result {
+      display: none;
+    }
+    .tool-entry-toggle {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.6rem;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 0.05em;
+      padding: 0 2px;
+      transition: color 0.15s;
+    }
+    .tool-entry-toggle:hover {
+      color: var(--neon-amber);
+    }
+    .tool-entry.clickable {
+      cursor: pointer;
+    }
+    .tool-entry.clickable:hover {
+      background: rgba(255,170,0,0.05);
+    }
+    .msg-card.highlight-flash {
+      animation: flash-highlight 1.5s ease-out;
+    }
+    @keyframes flash-highlight {
+      0% { box-shadow: 0 0 0 2px var(--neon-amber), 0 0 12px rgba(255,170,0,0.4); }
+      100% { box-shadow: none; }
+    }
+    .tool-feed::-webkit-scrollbar { width: 3px; }
+    .tool-feed::-webkit-scrollbar-thumb { background: var(--neon-amber); border-radius: 2px; }
+    .tool-entry {
+      background: var(--bg-card);
+      border-radius: 3px;
+      padding: 6px 8px;
+      border-left: 2px solid var(--neon-amber);
+      font-size: 0.7rem;
+    }
+    .tool-entry.tool-delegation {
+      border-left-color: var(--neon-purple);
+    }
+    .tool-entry.tool-progress {
+      border-left-color: var(--neon-cyan);
+    }
+    .tool-entry-header {
+      display: flex;
       align-items: center;
       gap: 6px;
+      margin-bottom: 2px;
     }
-    .subagent-card .dot {
+    .tool-entry-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--neon-amber);
+    }
+    .tool-entry.tool-delegation .tool-entry-name {
+      color: var(--neon-purple);
+    }
+    .tool-entry.tool-progress .tool-entry-name {
+      color: var(--neon-cyan);
+    }
+    .tool-entry-status {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--neon-amber);
+      box-shadow: 0 0 4px var(--neon-amber);
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+    .tool-entry-status.done {
+      background: var(--neon-green);
+      box-shadow: 0 0 4px var(--neon-green);
+      animation: none;
+    }
+    .tool-entry-input {
+      color: var(--text-dim);
+      font-size: 0.65rem;
+      max-height: 3rem;
+      overflow: hidden;
+      word-break: break-all;
+    }
+    .tool-entry-result {
+      color: var(--text-mid);
+      font-size: 0.65rem;
+      max-height: 4rem;
+      overflow-y: auto;
+      margin-top: 3px;
+      padding-top: 3px;
+      border-top: 1px solid var(--border-dim);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .tool-entry-result::-webkit-scrollbar { width: 2px; }
+    .tool-entry-result::-webkit-scrollbar-thumb { background: var(--text-dim); }
+
+    /* Main content split layout */
+    .main-split {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.5rem;
+      min-width: 0;
+    }
+    .chat-area::-webkit-scrollbar { width: 4px; }
+    .chat-area::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; }
+    .tool-panel { width: 320px; min-width: 180px; max-width: 600px; }
+    .tool-panel.collapsed { width: 0; min-width: 0; overflow: hidden; border: none; }
+
+    /* Drag handle */
+    .resize-handle {
+      width: 5px;
+      cursor: col-resize;
+      background: var(--border-dim);
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .resize-handle:hover, .resize-handle.dragging {
+      background: var(--neon-amber);
+      box-shadow: 0 0 6px rgba(255,170,0,0.3);
+    }
+
+    /* Inline command pills in chat bubbles */
+    .bubble-commands {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-dim);
+    }
+    .bubble-commands-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 2px 0;
+      user-select: none;
+    }
+    .bubble-commands-header:hover .bc-label {
+      color: var(--neon-amber);
+    }
+    .bc-arrow {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+    }
+    .bubble-commands.open .bc-arrow {
+      transform: rotate(90deg);
+    }
+    .bc-label {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.5rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      transition: color 0.15s;
+    }
+    .bc-count {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--neon-amber);
+    }
+    .bubble-commands-groups {
+      display: none;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .bubble-commands.open .bubble-commands-groups {
+      display: flex;
+    }
+    /* Group pill - the collapsed summary for a tool name */
+    .cmd-group-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.5rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,170,0,0.3);
+      background: rgba(255,170,0,0.06);
+      color: var(--neon-amber);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cmd-group-pill:hover {
+      background: rgba(255,170,0,0.15);
+      border-color: var(--neon-amber);
+    }
+    .cmd-group-pill .cmd-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--neon-amber);
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+    .cmd-group-pill.all-done .cmd-dot {
+      background: var(--neon-green);
+      animation: none;
+    }
+    .cmd-group-pill .cmd-group-count {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem;
+      color: var(--text-mid);
+      margin-left: 2px;
+    }
+    /* Expanded call list under a group */
+    .cmd-group-wrapper {
+      display: inline-flex;
+      flex-direction: column;
+    }
+    .cmd-group-calls {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 3px;
+      padding-left: 8px;
+      border-left: 1px solid rgba(255,170,0,0.2);
+    }
+    .cmd-group-wrapper.open .cmd-group-calls {
+      display: flex;
+    }
+    .cmd-call-item {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.55rem;
+      color: var(--text-mid);
+      padding: 1px 6px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .cmd-call-item:hover {
+      color: var(--neon-amber);
+      background: rgba(255,170,0,0.08);
+    }
+    .cmd-call-item .call-dot {
+      width: 4px; height: 4px;
+      border-radius: 50%;
+      background: var(--neon-amber);
+      animation: pulse-dot 1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    .cmd-call-item.done .call-dot {
+      background: var(--neon-green);
+      animation: none;
+    }
+
+    /* Sub-agent groups in activity panel */
+    .subagent-group {
+      border: 1px solid rgba(184,41,255,0.2);
+      border-radius: 3px;
+      margin-bottom: 2px;
+    }
+    .subagent-group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: rgba(184,41,255,0.06);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .subagent-group-header:hover {
+      background: rgba(184,41,255,0.12);
+    }
+    .subagent-group-header .sg-dot {
       width: 6px; height: 6px;
       border-radius: 50%;
       background: var(--neon-purple);
       box-shadow: 0 0 4px var(--neon-purple);
+      animation: pulse-dot 1.5s ease-in-out infinite;
     }
-    .subagent-card.done .dot {
+    .subagent-group-header.done .sg-dot {
       background: var(--neon-green);
       box-shadow: 0 0 4px var(--neon-green);
+      animation: none;
+    }
+    .subagent-group-header .sg-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--neon-purple);
+    }
+    .subagent-group-header .sg-count {
+      margin-left: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--text-dim);
+    }
+    .subagent-group-header .sg-arrow {
+      color: var(--text-dim);
+      font-size: 0.6rem;
+      transition: transform 0.15s;
+    }
+    .subagent-group.collapsed .sg-arrow { transform: rotate(-90deg); }
+    .subagent-group-body {
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .subagent-group.collapsed .subagent-group-body { display: none; }
+
+    @media (max-width: 768px) {
+      .main-split { flex-direction: column; }
+      .tool-panel { width: 100% !important; max-width: 100%; max-height: 250px; border-left: none; border-top: 1px solid var(--border-dim); }
+      .resize-handle { display: none; }
     }
 
     /* Settings panel */
@@ -455,14 +865,25 @@
     </div>
   </div>
 
-  <!-- Messages -->
-  <main id="messages" class="flex-1 overflow-y-auto px-6 py-4">
-    <div id="placeholder" class="text-center text-xs py-12" style="color: var(--text-dim)">
-      <div style="font-family:'Orbitron',monospace; font-size:0.65rem; letter-spacing:0.15em; margin-bottom:0.5rem" class="glow-cyan">AUTONOMOUS AGENT READY</div>
-      <div>MiniMax M2.5 orchestrator online. Enter a task — the agent will plan, execute, and complete it autonomously.</div>
-      <div style="margin-top:0.5rem; color: var(--text-dim)">You can send messages at any time to guide the agent mid-execution.</div>
-    </div>
-  </main>
+  <!-- Main split: Chat + Tool Panel -->
+  <div class="main-split">
+    <main id="messages" class="chat-area">
+      <div id="placeholder" class="text-center text-xs py-12" style="color: var(--text-dim)">
+        <div style="font-family:'Orbitron',monospace; font-size:0.65rem; letter-spacing:0.15em; margin-bottom:0.5rem" class="glow-cyan">AUTONOMOUS AGENT READY</div>
+        <div>MiniMax M2.5 orchestrator online. Enter a task — the agent will plan, execute, and complete it autonomously.</div>
+        <div style="margin-top:0.5rem; color: var(--text-dim)">You can send messages at any time to guide the agent mid-execution.</div>
+      </div>
+    </main>
+    <div class="resize-handle" id="resize-handle"></div>
+    <aside id="tool-panel" class="tool-panel">
+      <div class="tool-panel-header">
+        <span>ACTIVITY</span>
+        <span id="tool-count" class="tool-count"></span>
+        <button id="collapse-all-btn" class="collapse-all-btn" title="Collapse all entries">COLLAPSE ALL</button>
+      </div>
+      <div id="tool-feed" class="tool-feed"></div>
+    </aside>
+  </div>
 
   <script>
     const messagesEl   = document.getElementById('messages');
@@ -492,6 +913,11 @@
     const pauseBtn        = document.getElementById('pause-btn');
     const resumeBtn       = document.getElementById('resume-btn');
     const cancelBtn       = document.getElementById('cancel-btn');
+    const toolFeed        = document.getElementById('tool-feed');
+    const toolCountEl     = document.getElementById('tool-count');
+
+    let toolCallCount = 0;
+    const pendingToolEntries = new Map(); // tool_name -> DOM element for pairing use/result
 
     let personaName = 'Sophia';
     let personaColor = '#00f0ff';
@@ -507,6 +933,8 @@
     let currentGroup = null;
     const activeBubbles = new Map();
     const knownSubagents = new Map();
+    let bubbleIdCounter = 0;
+    let currentBubbleId = null;
 
     // Persona manager state
     let personas = [];
@@ -820,7 +1248,7 @@
 
       if (state.subagents_active && state.subagents_active.length > 0) {
         state.subagents_active.forEach(id => {
-          if (!knownSubagents.has(id)) knownSubagents.set(id, 'running');
+          if (!knownSubagents.has(id)) knownSubagents.set(id, { status: 'running', task: '' });
         });
       }
       renderSubagentCards();
@@ -835,10 +1263,16 @@
 
     function renderSubagentCards() {
       subagentCards.innerHTML = '';
-      knownSubagents.forEach((status, id) => {
+      knownSubagents.forEach((info, id) => {
+        const status = typeof info === 'string' ? info : info.status;
+        const task = typeof info === 'string' ? '' : (info.task || '');
+        const currentTool = typeof info === 'object' ? (info.currentTool || '') : '';
         const card = document.createElement('div');
         card.className = `subagent-card ${status === 'completed' ? 'done' : ''}`;
-        card.innerHTML = `<span class="dot"></span><span>${id}</span>`;
+        const icon = status === 'completed' ? '\u2713' : '';
+        const taskHtml = task ? `<div class="agent-task" title="${escapeHtml(task)}">${escapeHtml(task)}</div>` : '';
+        const toolHtml = currentTool ? `<div class="agent-tool">\u25B6 ${escapeHtml(currentTool)}</div>` : '';
+        card.innerHTML = `<span class="indicator">${icon}</span><div class="card-body"><span class="agent-id">${escapeHtml(id)}</span>${taskHtml}${toolHtml}</div>`;
         subagentCards.appendChild(card);
       });
     }
@@ -886,22 +1320,34 @@
       }
     }
 
+    let reconnectDelay = 1000;
+    const MAX_RECONNECT_DELAY = 30000;
+
     function connect() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      const params = new URLSearchParams(location.search);
+      const token = params.get('token') || '';
+      const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+      ws = new WebSocket(`${protocol}//${location.host}/ws${tokenParam}`);
 
       ws.onopen = () => {
         statusDot.style.background = 'var(--neon-green)';
         statusText.textContent = 'CONNECTED';
         statusText.style.color = 'var(--neon-green)';
+        reconnectDelay = 1000;
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         statusDot.style.background = 'var(--neon-red)';
-        statusText.textContent = 'DISCONNECTED';
         statusText.style.color = 'var(--neon-red)';
         ws = null;
-        setTimeout(connect, 3000);
+        if (e.code === 4001) {
+          statusText.textContent = 'UNAUTHORIZED';
+          return;
+        }
+        statusText.textContent = `RECONNECTING (${Math.round(reconnectDelay/1000)}s)...`;
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
       };
 
       ws.onerror = (e) => {
@@ -943,6 +1389,13 @@
         return;
       }
 
+      if (msg.type === 'await_confirm') {
+        // Legacy — loop now auto-continues
+        activityBar.classList.remove('hidden');
+        activityText.textContent = msg.content || 'Agent working...';
+        return;
+      }
+
       if (msg.type === 'persona_update') {
         // Server confirmed persona switch — apply it
         try {
@@ -955,9 +1408,27 @@
       }
 
       if (msg.type === 'subagent_event') {
-        const [action, agentId] = msg.content.split(':');
-        if (action === 'spawned') knownSubagents.set(agentId, 'running');
-        else if (action === 'completed') knownSubagents.set(agentId, 'completed');
+        try {
+          const evt = JSON.parse(msg.content);
+          if (evt.action === 'spawned') {
+            knownSubagents.set(evt.agent_id, { status: 'running', task: evt.task || '' });
+            getOrCreateSubagentGroup(evt.agent_id);
+          } else if (evt.action === 'completed') {
+            const existing = knownSubagents.get(evt.agent_id);
+            knownSubagents.set(evt.agent_id, { status: 'completed', task: existing ? existing.task : '' });
+            markSubagentGroupDone(evt.agent_id);
+          }
+        } catch (e) {
+          const [action, agentId] = msg.content.split(':');
+          if (action === 'spawned') {
+            knownSubagents.set(agentId, { status: 'running', task: '' });
+            getOrCreateSubagentGroup(agentId);
+          } else if (action === 'completed') {
+            const existing = knownSubagents.get(agentId);
+            knownSubagents.set(agentId, { status: 'completed', task: existing ? existing.task : '' });
+            markSubagentGroupDone(agentId);
+          }
+        }
         renderSubagentCards();
         return;
       }
@@ -967,52 +1438,63 @@
       if (msg.type === 'status') {
         activityBar.classList.remove('hidden');
         activityText.textContent = msg.content;
+        // New round — start a fresh bubble for the next chunk
+        if (msg.content.includes('thinking...')) {
+          activeBubbles.delete('main');
+          currentGroup = null;
+        }
+        // Track sub-agent tool usage from status messages like "Sub-agent [X] running tool..."
+        const subMatch = msg.content.match(/Sub-agent \[(.+?)\] running (.+?)\.\.\./);
+        if (subMatch) {
+          const [, agentId, toolName] = subMatch;
+          const existing = knownSubagents.get(agentId);
+          if (existing) {
+            existing.currentTool = toolName;
+            renderSubagentCards();
+          }
+        }
         return;
       }
 
       if (msg.type === 'chunk' || msg.type === 'stream') {
-        const bubbleKey = msg.tool_name ? `sub:${msg.tool_name}` : agent;
-        let bubble = activeBubbles.get(bubbleKey);
-        if (!bubble) {
-          const badgeLabel = msg.tool_name ? `SUB: ${msg.tool_name}` : undefined;
-          bubble = createBubble(agent, badgeLabel);
-          activeBubbles.set(bubbleKey, bubble);
+        const isSubagent = !!msg.tool_name;
+        if (isSubagent) {
+          // Sub-agent output goes to the activity panel
+          addSubagentOutput(msg.tool_name, msg.content);
+        } else {
+          // Main agent output goes to the chat area
+          const bubbleKey = 'main';
+          let bubble = activeBubbles.get(bubbleKey);
+          if (!bubble) {
+            bubble = createBubble(agent);
+            activeBubbles.set(bubbleKey, bubble);
+          }
+          const content = bubble.querySelector('.msg-content');
+          content.textContent += msg.content;
+          content.scrollTop = content.scrollHeight;
         }
-        const content = bubble.querySelector('.msg-content');
-        content.textContent += msg.content;
-        content.scrollTop = content.scrollHeight;
         return;
       }
 
       if (msg.type === 'tool_use') {
-        const toolName = msg.tool_name || 'unknown';
-        const inputStr = msg.tool_input ? JSON.stringify(msg.tool_input, null, 2) : '';
-        const truncInput = inputStr.length > 300 ? inputStr.slice(0, 300) + '...' : inputStr;
-        addMessage({
-          agent: 'system',
-          content: `[TOOL] ${toolName}\n${truncInput}`,
-          badgeClass: 'badge-tool',
-          badgeLabel: 'TOOL',
-        });
+        addToolEntry(msg.tool_name || 'unknown', msg.tool_input);
         return;
       }
 
       if (msg.type === 'tool_result') {
-        const toolName = msg.tool_name || '';
-        const prefix = toolName ? `[${toolName}] ` : '';
-        addMessage({
-          agent: 'system',
-          content: prefix + (msg.content || ''),
-          badgeClass: 'badge-system',
-          badgeLabel: 'RESULT',
-        });
+        updateToolResult(msg.tool_name || '', msg.content || '');
         return;
       }
 
       if (msg.type === 'done') {
         activityBar.classList.add('hidden');
         activeBubbles.clear();
+        activeSubBubbles.clear();
         knownSubagents.clear();
+        pendingToolEntries.clear();
+        pendingPills.clear();
+        bubbleToolGroups.clear();
+        subagentGroups.clear();
         return;
       }
 
@@ -1030,7 +1512,10 @@
     function createBubble(agent, customLabel) {
       const cfg = AGENTS[agent] || AGENTS.system;
       const bubble = document.createElement('div');
+      const bid = 'bubble-' + (++bubbleIdCounter);
+      bubble.id = bid;
       bubble.className = `msg-card ${cfg.borderClass}`;
+      currentBubbleId = bid;
 
       const label = customLabel || cfg.label();
       const badgeClass = customLabel ? 'badge-subagent' : cfg.badgeClass;
@@ -1046,7 +1531,8 @@
         currentGroup.className = 'exchange-group';
         messagesEl.insertBefore(currentGroup, messagesEl.firstChild);
       }
-      currentGroup.appendChild(bubble);
+      currentGroup.insertBefore(bubble, currentGroup.firstChild);
+      messagesEl.scrollTop = 0;
       return bubble;
     }
 
@@ -1069,8 +1555,412 @@
         currentGroup.className = 'exchange-group';
         messagesEl.insertBefore(currentGroup, messagesEl.firstChild);
       }
-      currentGroup.appendChild(bubble);
+      currentGroup.insertBefore(bubble, currentGroup.firstChild);
       messagesEl.scrollTop = 0;
+    }
+
+    /* ---- Collapse All Tool Activity ---- */
+
+    let allCollapsed = false;
+    document.getElementById('collapse-all-btn').addEventListener('click', () => {
+      allCollapsed = !allCollapsed;
+      const btn = document.getElementById('collapse-all-btn');
+      btn.textContent = allCollapsed ? 'EXPAND ALL' : 'COLLAPSE ALL';
+      toolFeed.querySelectorAll('.tool-entry').forEach(entry => {
+        if (allCollapsed) {
+          entry.classList.add('collapsed');
+          const tb = entry.querySelector('.tool-entry-toggle');
+          if (tb) tb.textContent = '+';
+        } else {
+          entry.classList.remove('collapsed');
+          const tb = entry.querySelector('.tool-entry-toggle');
+          if (tb) tb.textContent = '-';
+        }
+      });
+      toolFeed.querySelectorAll('.subagent-group').forEach(group => {
+        if (allCollapsed) group.classList.add('collapsed');
+        else group.classList.remove('collapsed');
+      });
+    });
+
+    /* ---- Drag-to-Resize Handle ---- */
+
+    const resizeHandle = document.getElementById('resize-handle');
+    const toolPanel = document.getElementById('tool-panel');
+    let isResizing = false;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      resizeHandle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const containerRect = document.querySelector('.main-split').getBoundingClientRect();
+      const newWidth = containerRect.right - e.clientX;
+      const clamped = Math.max(180, Math.min(600, newWidth));
+      toolPanel.style.width = clamped + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        resizeHandle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+
+    /* ---- Tool Activity Panel ---- */
+
+    const activeSubBubbles = new Map();
+    const subagentGroups = new Map(); // agentId -> group DOM element
+    const pendingPills = new Map(); // toolName -> { pill, detail } in chat bubble
+
+    function scrollToBubble(entry) {
+      const bid = entry.dataset.bubbleId;
+      if (!bid) return;
+      const bubble = document.getElementById(bid);
+      if (!bubble) return;
+      bubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      bubble.classList.remove('highlight-flash');
+      void bubble.offsetWidth;
+      bubble.classList.add('highlight-flash');
+    }
+
+    function scrollToToolEntry(entry) {
+      entry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      entry.style.boxShadow = '0 0 0 1px var(--neon-amber), 0 0 8px rgba(255,170,0,0.3)';
+      setTimeout(() => { entry.style.boxShadow = ''; }, 1500);
+    }
+
+    // Track grouped pills per bubble: bubbleId -> Map<toolName, { wrapper, pill, callsList, calls: [{item, toolEntry}], totalCount }>
+    const bubbleToolGroups = new Map();
+
+    function getOrCreateBubbleCommands(bubbleId) {
+      if (!bubbleId) return null;
+      const bubble = document.getElementById(bubbleId);
+      if (!bubble) return null;
+      let container = bubble.querySelector('.bubble-commands');
+      if (!container) {
+        container = document.createElement('div');
+        container.className = 'bubble-commands';
+
+        const header = document.createElement('div');
+        header.className = 'bubble-commands-header';
+        header.innerHTML = `<span class="bc-arrow">&#9654;</span><span class="bc-label">TOOLS</span><span class="bc-count">0</span>`;
+        header.addEventListener('click', () => container.classList.toggle('open'));
+
+        const groups = document.createElement('div');
+        groups.className = 'bubble-commands-groups';
+
+        container.appendChild(header);
+        container.appendChild(groups);
+        bubble.appendChild(container);
+
+        if (!bubbleToolGroups.has(bubbleId)) bubbleToolGroups.set(bubbleId, new Map());
+      }
+      return container;
+    }
+
+    function updateBubbleCommandsCount(bubbleId) {
+      const bubble = document.getElementById(bubbleId);
+      if (!bubble) return;
+      const container = bubble.querySelector('.bubble-commands');
+      if (!container) return;
+      const groupMap = bubbleToolGroups.get(bubbleId);
+      if (!groupMap) return;
+      let total = 0;
+      groupMap.forEach(g => total += g.totalCount);
+      const countEl = container.querySelector('.bc-count');
+      if (countEl) countEl.textContent = total;
+    }
+
+    function addCommandPill(toolName, toolInput, bubbleId, toolEntry) {
+      const container = getOrCreateBubbleCommands(bubbleId);
+      if (!container || !bubbleId) return;
+
+      const groupsEl = container.querySelector('.bubble-commands-groups');
+      if (!groupsEl) return;
+
+      const groupMap = bubbleToolGroups.get(bubbleId);
+      let group = groupMap.get(toolName);
+
+      if (!group) {
+        // Create new group wrapper for this tool name
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cmd-group-wrapper';
+
+        const pill = document.createElement('span');
+        pill.className = 'cmd-group-pill';
+        pill.innerHTML = `<span class="cmd-dot"></span>${escapeHtml(toolName)}<span class="cmd-group-count"></span>`;
+        pill.addEventListener('click', (e) => {
+          e.stopPropagation();
+          wrapper.classList.toggle('open');
+        });
+
+        const callsList = document.createElement('div');
+        callsList.className = 'cmd-group-calls';
+
+        wrapper.appendChild(pill);
+        wrapper.appendChild(callsList);
+        groupsEl.appendChild(wrapper);
+
+        group = { wrapper, pill, callsList, calls: [], totalCount: 0 };
+        groupMap.set(toolName, group);
+      }
+
+      // Add individual call item
+      group.totalCount++;
+      const callIndex = group.totalCount;
+      const inputSnippet = toolInput ? JSON.stringify(toolInput).slice(0, 80) : '';
+
+      const item = document.createElement('div');
+      item.className = 'cmd-call-item';
+      item.innerHTML = `<span class="call-dot"></span>#${callIndex}`;
+      item.title = inputSnippet;
+      if (toolEntry) {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          scrollToToolEntry(toolEntry);
+        });
+      }
+      group.callsList.appendChild(item);
+      group.calls.push({ item, toolEntry });
+
+      // Update count badge on group pill (hide if only 1)
+      const countSpan = group.pill.querySelector('.cmd-group-count');
+      if (countSpan) countSpan.textContent = group.totalCount > 1 ? `\u00D7${group.totalCount}` : '';
+
+      // Update the group pill done state
+      group.pill.classList.remove('all-done');
+
+      updateBubbleCommandsCount(bubbleId);
+
+      return { pill: group.pill, callItem: item, group };
+    }
+
+    function getOrCreateSubagentGroup(agentId) {
+      if (subagentGroups.has(agentId)) return subagentGroups.get(agentId);
+
+      const group = document.createElement('div');
+      group.className = 'subagent-group';
+
+      const header = document.createElement('div');
+      header.className = 'subagent-group-header';
+      header.innerHTML = `
+        <span class="sg-dot"></span>
+        <span class="sg-name">SUB: ${escapeHtml(agentId)}</span>
+        <span class="sg-count">0</span>
+        <span class="sg-arrow">&#9660;</span>
+      `;
+      header.addEventListener('click', () => {
+        group.classList.toggle('collapsed');
+      });
+
+      const body = document.createElement('div');
+      body.className = 'subagent-group-body';
+
+      group.appendChild(header);
+      group.appendChild(body);
+      toolFeed.prepend(group);
+      subagentGroups.set(agentId, group);
+      return group;
+    }
+
+    function updateSubagentGroupCount(agentId) {
+      const group = subagentGroups.get(agentId);
+      if (!group) return;
+      const body = group.querySelector('.subagent-group-body');
+      const count = body ? body.children.length : 0;
+      const countEl = group.querySelector('.sg-count');
+      if (countEl) countEl.textContent = count;
+    }
+
+    function markSubagentGroupDone(agentId) {
+      const group = subagentGroups.get(agentId);
+      if (!group) return;
+      const header = group.querySelector('.subagent-group-header');
+      if (header) header.classList.add('done');
+    }
+
+    function addSubagentOutput(agentId, text) {
+      const group = getOrCreateSubagentGroup(agentId);
+      let entry = activeSubBubbles.get(agentId);
+      if (!entry) {
+        entry = document.createElement('div');
+        entry.className = 'tool-entry tool-delegation clickable';
+        if (currentBubbleId) entry.dataset.bubbleId = currentBubbleId;
+        entry.addEventListener('click', () => scrollToBubble(entry));
+
+        const header = document.createElement('div');
+        header.className = 'tool-entry-header';
+
+        const dot = document.createElement('div');
+        dot.className = 'tool-entry-status';
+
+        const name = document.createElement('span');
+        name.className = 'tool-entry-name';
+        name.textContent = 'OUTPUT';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'tool-entry-toggle';
+        toggleBtn.textContent = '-';
+        toggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const collapsed = entry.classList.toggle('collapsed');
+          toggleBtn.textContent = collapsed ? '+' : '-';
+        });
+
+        header.appendChild(dot);
+        header.appendChild(name);
+        header.appendChild(toggleBtn);
+
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'tool-entry-result';
+        resultDiv.style.maxHeight = '6rem';
+
+        entry.appendChild(header);
+        entry.appendChild(resultDiv);
+
+        const body = group.querySelector('.subagent-group-body');
+        body.prepend(entry);
+        activeSubBubbles.set(agentId, entry);
+        updateSubagentGroupCount(agentId);
+      }
+      const resultDiv = entry.querySelector('.tool-entry-result');
+      resultDiv.textContent += text;
+      resultDiv.scrollTop = resultDiv.scrollHeight;
+      toolFeed.scrollTop = 0;
+    }
+
+    function addToolEntry(toolName, toolInput) {
+      toolCallCount++;
+      toolCountEl.textContent = toolCallCount;
+
+      const isDelegation = toolName === 'delegate_to_subagent';
+      const isProgress = toolName === 'report_progress' || toolName === 'check_subagents';
+
+      const entry = document.createElement('div');
+      entry.className = `tool-entry clickable${isDelegation ? ' tool-delegation' : ''}${isProgress ? ' tool-progress' : ''}`;
+      if (currentBubbleId) entry.dataset.bubbleId = currentBubbleId;
+      entry.addEventListener('click', () => scrollToBubble(entry));
+
+      const inputStr = toolInput ? JSON.stringify(toolInput, null, 2) : '';
+      const truncInput = inputStr.length > 200 ? inputStr.slice(0, 200) + '...' : inputStr;
+
+      const header = document.createElement('div');
+      header.className = 'tool-entry-header';
+
+      const dot = document.createElement('div');
+      dot.className = 'tool-entry-status';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'tool-entry-name';
+      nameSpan.textContent = toolName;
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'tool-entry-toggle';
+      toggleBtn.textContent = '-';
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const collapsed = entry.classList.toggle('collapsed');
+        toggleBtn.textContent = collapsed ? '+' : '-';
+      });
+
+      header.appendChild(dot);
+      header.appendChild(nameSpan);
+      header.appendChild(toggleBtn);
+      entry.appendChild(header);
+
+      if (truncInput) {
+        const inputDiv = document.createElement('div');
+        inputDiv.className = 'tool-entry-input';
+        inputDiv.textContent = truncInput;
+        entry.appendChild(inputDiv);
+      }
+
+      // If this is a sub-agent tool call, nest it in the group
+      if (isDelegation && toolInput && toolInput.agent_id) {
+        const group = getOrCreateSubagentGroup(toolInput.agent_id);
+        const body = group.querySelector('.subagent-group-body');
+        body.prepend(entry);
+        updateSubagentGroupCount(toolInput.agent_id);
+      } else {
+        toolFeed.prepend(entry);
+      }
+      toolFeed.scrollTop = 0;
+      pendingToolEntries.set(toolName, entry);
+
+      // Add command pill in the chat bubble
+      const pillData = addCommandPill(toolName, toolInput, currentBubbleId, entry);
+      if (pillData) pendingPills.set(toolName, pillData);
+    }
+
+    function updateToolResult(toolName, result) {
+      let entry = pendingToolEntries.get(toolName);
+      if (!entry) {
+        entry = document.createElement('div');
+        entry.className = 'tool-entry clickable';
+        if (currentBubbleId) entry.dataset.bubbleId = currentBubbleId;
+        entry.addEventListener('click', () => scrollToBubble(entry));
+
+        const header = document.createElement('div');
+        header.className = 'tool-entry-header';
+
+        const dot = document.createElement('div');
+        dot.className = 'tool-entry-status done';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'tool-entry-name';
+        nameSpan.textContent = toolName || 'RESULT';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'tool-entry-toggle';
+        toggleBtn.textContent = '-';
+        toggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const collapsed = entry.classList.toggle('collapsed');
+          toggleBtn.textContent = collapsed ? '+' : '-';
+        });
+
+        header.appendChild(dot);
+        header.appendChild(nameSpan);
+        header.appendChild(toggleBtn);
+        entry.appendChild(header);
+        toolFeed.prepend(entry);
+      }
+
+      // Mark as done
+      const dot = entry.querySelector('.tool-entry-status');
+      if (dot) dot.classList.add('done');
+
+      // Add result
+      const truncResult = result.length > 500 ? result.slice(0, 500) + '...' : result;
+      const resultDiv = document.createElement('div');
+      resultDiv.className = 'tool-entry-result';
+      resultDiv.textContent = truncResult;
+      entry.appendChild(resultDiv);
+
+      pendingToolEntries.delete(toolName);
+
+      // Update the command pill in the chat bubble
+      const pillData = pendingPills.get(toolName);
+      if (pillData) {
+        // Mark individual call item as done
+        if (pillData.callItem) pillData.callItem.classList.add('done');
+        // Check if all calls in this group are done
+        if (pillData.group) {
+          const allDone = pillData.group.calls.every(c => c.item.classList.contains('done'));
+          if (allDone) pillData.group.pill.classList.add('all-done');
+        }
+        pendingPills.delete(toolName);
+      }
+
+      toolFeed.scrollTop = 0;
     }
 
     /* ---- Form Submit (always active, never blocked) ---- */
@@ -1086,6 +1976,9 @@
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'message', content: text }));
+        // Clear active bubbles so the agent's next response gets a fresh bubble
+        activeBubbles.clear();
+        currentGroup = null;
       }
     });
 

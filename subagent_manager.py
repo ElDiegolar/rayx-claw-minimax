@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Awaitable, Callable
 
-import anthropic
-
-from agents import minimax_client
 from config import Settings
+from minimax_api import stream_and_collect
 from models import Agent, WSMessage
 from rate_limiter import RateLimiter
-from tools import SUBAGENT_TOOLS, execute_tool
+from tools import SUBAGENT_TOOLS, execute_tool_async
 
 log = logging.getLogger(__name__)
 settings = Settings()
@@ -47,7 +46,8 @@ class SubAgent:
         max_rounds = settings.max_subagent_rounds
         full_text = ""
 
-        for round_num in range(max_rounds):
+        round_num = 0
+        while round_num < max_rounds:
             self._check_cancelled()
 
             if round_num > 0:
@@ -62,34 +62,40 @@ class SubAgent:
                 ))
 
             # Rate-limited API call
-            round_text = ""
+            round_text_parts = []
+
+            async def _on_text(text: str):
+                round_text_parts.append(text)
+                await send(WSMessage(
+                    type="chunk", agent=Agent.MINIMAX,
+                    content=text,
+                    tool_name=self.agent_id,
+                ))
+
             async with self._rate_limiter:
                 try:
-                    async with minimax_client.messages.stream(
-                        model=settings.minimax_model,
-                        max_tokens=16384,
-                        system=self._system or anthropic.NOT_GIVEN,
+                    response = await stream_and_collect(
                         messages=self.messages,
+                        system=self._system or "",
                         tools=SUBAGENT_TOOLS,
-                    ) as stream:
-                        async for event in stream:
-                            if event.type == "content_block_delta":
-                                if hasattr(event.delta, "text") and event.delta.text:
-                                    round_text += event.delta.text
-                                    await send(WSMessage(
-                                        type="chunk", agent=Agent.MINIMAX,
-                                        content=event.delta.text,
-                                        tool_name=self.agent_id,
-                                    ))
+                        on_text=_on_text,
+                    )
+                except RuntimeError as exc:
+                    err_str = str(exc)
+                    if "429" in err_str or "rate" in err_str.lower():
+                        log.warning("Sub-agent [%s] hit rate limit, backing off", self.agent_id)
+                        await asyncio.sleep(5)
+                        continue  # retry without incrementing round_num
+                    if "tool_use_id" in err_str or "tool id" in err_str.lower() or "not found" in err_str.lower():
+                        log.warning("Sub-agent [%s] tool ID mismatch, skipping round: %s", self.agent_id, err_str[:200])
+                        break  # exit tool loop — can't recover sub-agent context easily
+                    raise
 
-                        response = await stream.get_final_message()
-                except anthropic.RateLimitError:
-                    log.warning("Sub-agent [%s] hit rate limit, backing off", self.agent_id)
-                    await asyncio.sleep(5)
-                    continue
+            round_num += 1
 
-            full_text += round_text
-            self.messages.append({"role": "assistant", "content": response.content})
+            full_text += "".join(round_text_parts)
+            # Preserve full content (including thinking blocks) for round-trip
+            self.messages.append({"role": "assistant", "content": response.to_content_list()})
 
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
@@ -111,7 +117,7 @@ class SubAgent:
                     tool_name=name, tool_input=inp,
                 ))
 
-                result_text = execute_tool(name, inp)
+                result_text = await execute_tool_async(name, inp)
                 log.info("Sub-agent [%s] tool %s -> %d chars", self.agent_id, name, len(result_text))
 
                 display = result_text[:2000] + "..." if len(result_text) > 2000 else result_text
@@ -142,7 +148,8 @@ class SubAgentManager:
         self._rate_limiter = rate_limiter
         self._cancel_event = cancel_event
         self._agents: dict[str, SubAgent] = {}
-        self._running_tasks: dict[str, asyncio.Task] = {}
+        self._background_tasks: dict[str, asyncio.Task] = {}
+        self._completed_results: dict[str, str] = {}
 
     def _get_or_create(self, agent_id: str) -> SubAgent:
         if agent_id not in self._agents:
@@ -162,14 +169,14 @@ class SubAgentManager:
 
         await send(WSMessage(
             type="subagent_event", agent=Agent.MINIMAX,
-            content=f"spawned:{agent_id}",
+            content=json.dumps({"action": "spawned", "agent_id": agent_id, "task": prompt[:200]}),
         ))
 
         result = await agent.run(prompt, system, send)
 
         await send(WSMessage(
             type="subagent_event", agent=Agent.MINIMAX,
-            content=f"completed:{agent_id}",
+            content=json.dumps({"action": "completed", "agent_id": agent_id}),
         ))
 
         return result
@@ -212,13 +219,68 @@ class SubAgentManager:
                 final.append(r)
         return final
 
+    def spawn_background(
+        self, agent_id: str, prompt: str, system: str, send: Send
+    ) -> None:
+        """Launch a sub-agent task in the background without awaiting."""
+        agent = self._get_or_create(agent_id)
+
+        async def _run():
+            await send(WSMessage(
+                type="subagent_event", agent=Agent.MINIMAX,
+                content=json.dumps({"action": "spawned", "agent_id": agent_id, "task": prompt[:200]}),
+            ))
+            result = await agent.run(prompt, system, send)
+            await send(WSMessage(
+                type="subagent_event", agent=Agent.MINIMAX,
+                content=json.dumps({"action": "completed", "agent_id": agent_id}),
+            ))
+            return result
+
+        task = asyncio.create_task(_run())
+        self._background_tasks[agent_id] = task
+        task.add_done_callback(lambda t, aid=agent_id: self._on_background_done(aid, t))
+        log.info("Spawned background sub-agent: %s", agent_id)
+
+    def _on_background_done(self, agent_id: str, task: asyncio.Task) -> None:
+        self._background_tasks.pop(agent_id, None)
+        try:
+            result = task.result()
+            self._completed_results[agent_id] = result
+        except asyncio.CancelledError:
+            self._completed_results[agent_id] = "[cancelled]"
+        except Exception as e:
+            self._completed_results[agent_id] = f"[error: {e or repr(e)}]"
+        log.info("Background sub-agent '%s' done", agent_id)
+
+    def has_active_tasks(self) -> bool:
+        return bool(self._background_tasks) or bool(self._completed_results)
+
+    def has_running_tasks(self) -> bool:
+        return bool(self._background_tasks)
+
+    def get_status(self) -> dict:
+        """Get status of all background sub-agents."""
+        status = {}
+        for aid in self._background_tasks:
+            status[aid] = {"status": "running"}
+        for aid, result in self._completed_results.items():
+            status[aid] = {"status": "completed", "result": result[:2000]}
+        return status
+
+    def collect_completed(self) -> dict[str, str]:
+        """Drain and return all completed results."""
+        results = dict(self._completed_results)
+        self._completed_results.clear()
+        return results
+
     async def cancel_all(self) -> None:
         """Cancel all running sub-agent tasks."""
-        for task_id, task in self._running_tasks.items():
+        for task_id, task in self._background_tasks.items():
             if not task.done():
                 task.cancel()
-                log.info("Cancelled sub-agent task: %s", task_id)
-        self._running_tasks.clear()
+                log.info("Cancelled background sub-agent: %s", task_id)
+        self._background_tasks.clear()
 
     @property
     def active_agent_ids(self) -> list[str]:

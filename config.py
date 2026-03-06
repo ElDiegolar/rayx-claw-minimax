@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     persona_name: str = "default"
     host: str = "127.0.0.1"
     port: int = 8080
+    # Auth — set AUTH_TOKEN in .env to enable; empty = no auth (local dev only)
+    auth_token: str = ""
     # Rate limiting
     max_rpm: int = 18  # requests per minute (buffer under 20 RPM)
     max_concurrent: int = 5  # max parallel API calls

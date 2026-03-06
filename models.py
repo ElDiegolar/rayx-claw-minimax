@@ -44,7 +44,8 @@ class WSMessage(BaseModel):
     """Server -> Client WebSocket message."""
     type: Literal[
         "chunk", "status", "error", "done", "tool_use", "tool_result",
-        "history", "progress", "subagent_event", "task_state", "persona_update"
+        "history", "progress", "subagent_event", "task_state", "persona_update",
+        "await_confirm"
     ]
     agent: Agent
     content: str = ""
@@ -56,5 +57,5 @@ class WSMessage(BaseModel):
 
 class UserMessage(BaseModel):
     """Client -> Server WebSocket message."""
-    type: Literal["message", "cancel", "pause", "resume", "switch_persona"]
+    type: Literal["message", "cancel", "pause", "resume", "switch_persona", "confirm"]
     content: str = ""

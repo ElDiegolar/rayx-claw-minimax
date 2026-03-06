@@ -33,14 +33,18 @@ class RateLimiter:
     async def acquire(self) -> None:
         """Wait until a request slot is available (rate + concurrency)."""
         await self._semaphore.acquire()
-        async with self._lock:
-            self._refill()
-            while self._tokens < 1.0:
-                wait_time = (1.0 - self._tokens) * self._interval
-                log.debug("Rate limiter: waiting %.2fs for token", wait_time)
-                await asyncio.sleep(wait_time)
+
+        while True:
+            async with self._lock:
                 self._refill()
-            self._tokens -= 1.0
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+                wait_time = (1.0 - self._tokens) * self._interval
+
+            # Sleep OUTSIDE the lock so other coroutines can proceed
+            log.debug("Rate limiter: waiting %.2fs for token", wait_time)
+            await asyncio.sleep(wait_time)
 
     def release(self) -> None:
         """Release the concurrency semaphore after an API call completes."""

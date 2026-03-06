@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import logging
 import os
@@ -231,6 +232,19 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "check_subagents",
+        "description": (
+            "Check the status of background sub-agents. Returns which agents are "
+            "still running and the results of any that have completed. Use this "
+            "after delegating tasks to monitor progress and collect results."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "delegate_to_subagent",
         "description": (
             "Delegate a task to a named MiniMax sub-agent. Each agent_id maintains its own "
@@ -267,7 +281,7 @@ TOOL_DEFINITIONS = [
 ORCHESTRATOR_TOOL_NAMES = {
     "read_file", "write_file", "list_directory", "search_files", "grep_files",
     "run_command", "save_memory", "recall_memory", "delete_memory",
-    "report_progress", "mark_complete", "delegate_to_subagent",
+    "report_progress", "mark_complete", "delegate_to_subagent", "check_subagents",
 }
 SUBAGENT_TOOL_NAMES = {
     "read_file", "write_file", "list_directory", "search_files", "grep_files",
@@ -282,8 +296,10 @@ SUBAGENT_TOOLS = [t for t in TOOL_DEFINITIONS if t["name"] in SUBAGENT_TOOL_NAME
 # Path sandboxing
 # ---------------------------------------------------------------------------
 
+SENSITIVE_PATTERNS = {".env", ".env.local", ".env.production", "credentials.json", "secrets.yaml"}
+
 def _resolve_path(path_str: str) -> Path:
-    """Resolve a path, ensuring it stays within the workspace."""
+    """Resolve a path, ensuring it stays within the workspace and is not a symlink escape."""
     workspace = Path(settings.workspace).resolve()
     p = Path(path_str)
 
@@ -298,6 +314,20 @@ def _resolve_path(path_str: str) -> Path:
         raise PermissionError(
             f"Access denied: {path_str} is outside workspace ({workspace})"
         )
+
+    # Block symlinks that point outside the workspace
+    if resolved.is_symlink():
+        real_target = resolved.resolve()
+        try:
+            real_target.relative_to(workspace)
+        except ValueError:
+            raise PermissionError(
+                f"Access denied: {path_str} is a symlink pointing outside workspace"
+            )
+
+    # Block access to sensitive files
+    if resolved.name.lower() in SENSITIVE_PATTERNS:
+        raise PermissionError(f"Access denied: {resolved.name} is a protected file")
 
     return resolved
 
@@ -347,13 +377,14 @@ def _list_directory(path: str = ".") -> str:
     except Exception as e:
         return f"Error listing directory: {e}"
 
+    total = len(entries)
     lines = []
     for entry in entries[:200]:
         prefix = "[DIR] " if entry.is_dir() else "[FILE]"
         lines.append(f"{prefix} {entry.name}")
 
-    if len(list(resolved.iterdir())) > 200:
-        lines.append(f"\n... truncated (200 of {len(list(resolved.iterdir()))} entries shown)")
+    if total > 200:
+        lines.append(f"\n... truncated (200 of {total} entries shown)")
 
     return "\n".join(lines) if lines else "(empty directory)"
 
@@ -444,8 +475,16 @@ def _grep_files(pattern: str, path: str = ".", glob_filter: str | None = None) -
 # Shell command execution
 # ---------------------------------------------------------------------------
 
+BLOCKED_COMMANDS = re.compile(
+    r"(^|\s*[;&|]\s*)(rm\s+-rf\s+/|mkfs\.|dd\s+if=|:(){ :|chmod\s+-R\s+777\s+/|curl\s+.*\|\s*sh|wget\s+.*\|\s*sh)",
+    re.IGNORECASE,
+)
+
 def _run_command(command: str, cwd: str = ".", timeout: int = 30) -> str:
     import subprocess
+
+    if BLOCKED_COMMANDS.search(command):
+        return "Error: command blocked by safety filter"
 
     workspace = Path(settings.workspace).resolve()
     cwd_path = Path(cwd)
@@ -532,3 +571,8 @@ def execute_tool(name: str, tool_input: dict) -> str:
         return f"Task marked complete: {tool_input['summary']}"
     else:
         return f"Unknown tool: {name}"
+
+
+async def execute_tool_async(name: str, tool_input: dict) -> str:
+    """Execute a tool in a thread to avoid blocking the event loop."""
+    return await asyncio.to_thread(execute_tool, name, tool_input)

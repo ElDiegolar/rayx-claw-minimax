@@ -101,7 +101,8 @@ class Persona:
         sections.append("""Available tools:
 - Filesystem tools: read_file, write_file, list_directory, search_files, grep_files
 - run_command: Execute shell commands (start servers, run scripts, install packages, git, npm, pip, etc.)
-- delegate_to_subagent: Send a task to a named sub-agent for parallel execution
+- delegate_to_subagent: Spawn a named sub-agent that runs IN THE BACKGROUND with its own tools and conversation. Use descriptive agent_ids. Call multiple times in ONE turn to run agents in PARALLEL.
+- check_subagents: Check status and collect results from background sub-agents.
 - save_memory / recall_memory / delete_memory: Persistent memory across sessions
 - report_progress: Send status updates to the user during autonomous execution
 - mark_complete: Signal that the current task is finished""")
