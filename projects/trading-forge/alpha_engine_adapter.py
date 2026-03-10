@@ -31,6 +31,8 @@ from polymarket_alpha_engine_v3 import (
     Order,
     Res,
     Direction,
+    Log,
+    PAPER,
 )
 from models import PositionStatus
 
@@ -141,8 +143,35 @@ class AlphaEngineAdapter:
     """Wraps v3 Engine to provide TradingOrchestrator-compatible interface."""
 
     def __init__(self, config: Optional[Cfg] = None):
-        self._engine = Engine(config)
         self._initial_bankroll = (config.bankroll if config else 10_000.0)
+
+        # Trade history (persisted across restarts)
+        self._history: List[Dict] = Log.read_history()
+        logger.info(f"Loaded {len(self._history)} historical trades")
+
+        # Restore bankroll from history
+        if self._history:
+            last_br = self._history[-1].get("bankroll", 0)
+            if last_br > 0:
+                restored = last_br
+            else:
+                restored = self._initial_bankroll + sum(t.get("pnl", 0) for t in self._history)
+            logger.info(f"Restoring bankroll from history: ${restored:.2f}")
+        else:
+            restored = self._initial_bankroll
+
+        # Override config bankroll with restored value
+        if config:
+            config.bankroll = restored
+        else:
+            config = Cfg(bankroll=restored)
+
+        self._engine = Engine(config)
+        # Set peak to max seen in history
+        if self._history:
+            peak = max(t.get("bankroll", 0) for t in self._history)
+            self._engine.p.peak = max(peak, restored)
+        self._engine.p.d_start = restored
         self._portfolio = PortfolioWrapper(self._engine.p, self._initial_bankroll)
 
         # Server-expected state
@@ -158,7 +187,7 @@ class AlphaEngineAdapter:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
 
-        logger.info("AlphaEngineAdapter v3 initialized")
+        logger.info(f"AlphaEngineAdapter v3 initialized — BR=${restored:.2f} (initial=${self._initial_bankroll:.2f})")
 
     @property
     def portfolio(self) -> PortfolioWrapper:
@@ -241,6 +270,7 @@ class AlphaEngineAdapter:
             "num_positions": len(p.open_pos),
             "exposure": sum(x.get("size", 0) for x in p.open_pos) / p.br if p.br > 0 else 0.0,
             "last_scan": None,
+            "mode": "PAPER" if PAPER else "LIVE",
         }
 
     def get_portfolio(self) -> Dict[str, Any]:
@@ -328,11 +358,49 @@ class AlphaEngineAdapter:
                 })
         return result
 
+    def get_history(self, limit: int = 200) -> List[Dict[str, Any]]:
+        """Get full persistent trade history (survives restarts)."""
+        # Reload from disk to pick up trades written this session
+        self._history = Log.read_history()
+        stream_labels = {1:"Directional",2:"Intra-Arb",3:"Cross-Arb",4:"Strike-Arb",
+                         5:"Oracle-Edge",6:"Late-Res",7:"Market-Making",8:"Copy"}
+        result = []
+        for t in self._history[-limit:]:
+            s = t.get("s", 0)
+            result.append({
+                "trade_id": t.get("pid", ""),
+                "market_id": t.get("mid", ""),
+                "direction": t.get("dir", ""),
+                "stream": s,
+                "stream_name": stream_labels.get(s, f"S{s}"),
+                "venue": t.get("venue", ""),
+                "leg": t.get("leg", ""),
+                "size": t.get("size", 0),
+                "fill": t.get("fill", 0),
+                "p_model": t.get("pm", 0),
+                "p_market": t.get("pk", 0),
+                "edge": t.get("edge", 0),
+                "ev": t.get("ev", 0),
+                "kelly_f": t.get("kf", 0),
+                "note": t.get("note", ""),
+                "pnl": t.get("pnl", 0),
+                "won": t.get("won", None),
+                "status": "WON" if t.get("won") else ("LOST" if t.get("won") is False else "CLOSED"),
+                "open_time": datetime.fromtimestamp(t["open_ts"]).isoformat() if t.get("open_ts", 0) > 0 else None,
+                "close_time": datetime.fromtimestamp(t["close_ts"]).isoformat() if t.get("close_ts", 0) > 0 else None,
+                "bankroll_after": t.get("bankroll", 0),
+                "timestamp": t.get("ts", ""),
+            })
+        return result
+
     def get_metrics(self) -> Dict[str, Any]:
-        trades = self.get_trades(limit=10000)
+        # Combine current session + history for complete metrics
+        session_trades = self.get_trades(limit=10000)
+        history = self.get_history(limit=10000)
+        all_trades = history  # History includes current session (written to disk)
         p = self._port()
 
-        if not trades:
+        if not all_trades:
             return {
                 "total_trades": 0, "winning_trades": 0, "losing_trades": 0,
                 "win_rate": 0.0, "total_pnl": 0.0, "avg_win": 0.0,
@@ -341,19 +409,21 @@ class AlphaEngineAdapter:
                 "dropped_signals": len(self.dropped_signals),
                 "scans": self.total_scans,
                 "per_stream_pnl": dict(p.s_pnl),
+                "session_trades": len(session_trades),
+                "history_trades": 0,
             }
 
-        wins = [t for t in trades if t["pnl"] > 0]
-        losses = [t for t in trades if t["pnl"] <= 0]
-        total_pnl = sum(t["pnl"] for t in trades)
+        wins = [t for t in all_trades if t["pnl"] > 0]
+        losses = [t for t in all_trades if t["pnl"] <= 0]
+        total_pnl = sum(t["pnl"] for t in all_trades)
         avg_win = sum(t["pnl"] for t in wins) / len(wins) if wins else 0
         avg_loss = abs(sum(t["pnl"] for t in losses) / len(losses)) if losses else 1
 
         return {
-            "total_trades": len(trades),
+            "total_trades": len(all_trades),
             "winning_trades": len(wins),
             "losing_trades": len(losses),
-            "win_rate": len(wins) / len(trades),
+            "win_rate": len(wins) / len(all_trades),
             "total_pnl": total_pnl,
             "avg_win": avg_win,
             "avg_loss": avg_loss,
@@ -362,6 +432,8 @@ class AlphaEngineAdapter:
             "dropped_signals": len(self.dropped_signals),
             "scans": self.total_scans,
             "per_stream_pnl": dict(p.s_pnl),
+            "session_trades": len(session_trades),
+            "history_trades": len(all_trades),
         }
 
 

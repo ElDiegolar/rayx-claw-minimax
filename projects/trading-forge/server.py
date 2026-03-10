@@ -209,26 +209,10 @@ async def health_check():
 # STATUS ENDPOINTS
 # =============================================================================
 
-@app.get("/status", response_model=StatusResponse)
+@app.get("/status")
 async def get_status():
-    """
-    Get current trading status.
-    
-    Returns:
-        StatusResponse with current trading state
-    """
-    orch = get_orchestrator()
-    
-    return StatusResponse(
-        running=orch.running,
-        bankroll=orch.portfolio.bankroll,
-        total_pnl=orch.portfolio.total_pnl,
-        daily_pnl=orch.portfolio.daily_pnl,
-        drawdown=orch.portfolio.drawdown,
-        num_positions=orch.portfolio.num_positions,
-        exposure=orch.portfolio.exposure,
-        last_scan=orch.last_scan_time.isoformat() if orch.last_scan_time else None
-    )
+    """Get current trading status."""
+    return get_orchestrator().get_status()
 
 
 @app.get("/portfolio")
@@ -436,6 +420,14 @@ async def get_dropped_signals(limit: int = 50):
         "count": len(dropped_data),
         "dropped_signals": dropped_data
     }
+
+
+@app.get("/history")
+async def get_history(limit: int = 200):
+    """Get full persistent trade history (survives restarts)."""
+    orch = get_orchestrator()
+    trades = orch.get_history(limit=limit)
+    return {"count": len(trades), "trades": trades}
 
 
 # =============================================================================

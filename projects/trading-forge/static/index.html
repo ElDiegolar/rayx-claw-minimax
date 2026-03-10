@@ -447,6 +447,7 @@
   <div class="header">
     <div class="logo">ALPHA <span>ENGINE</span> // TRADING FORGE</div>
     <div class="header-status">
+      <span id="modeBadge" style="font-family: Orbitron; font-size: 10px; font-weight: 700; letter-spacing: 2px; padding: 4px 10px; border: 1px solid var(--yellow); color: var(--yellow);">PAPER</span>
       <div class="status-badge">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">OFFLINE</span>
@@ -539,6 +540,20 @@
       </div>
     </div>
 
+    <!-- Trade History -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <div class="panel-title">Trade History</div>
+        <span id="historyCount" style="font-size: 11px; color: var(--text-dim);">0</span>
+      </div>
+      <div class="panel-body" id="historyBody" style="max-height: 500px;">
+        <div class="empty-state">
+          <div class="icon">///</div>
+          NO TRADE HISTORY
+        </div>
+      </div>
+    </div>
+
     <!-- Dropped Signals -->
     <div class="panel panel-full">
       <div class="panel-header">
@@ -626,6 +641,19 @@
         dot.classList.remove('active')
         txt.textContent = 'OFFLINE'
         txt.style.color = 'var(--red)'
+      }
+
+      const badge = $('modeBadge')
+      if (s.mode === 'LIVE') {
+        badge.textContent = 'LIVE'
+        badge.style.color = 'var(--red)'
+        badge.style.borderColor = 'var(--red)'
+        badge.style.boxShadow = '0 0 10px rgba(255,0,60,0.4)'
+      } else {
+        badge.textContent = 'PAPER'
+        badge.style.color = 'var(--yellow)'
+        badge.style.borderColor = 'var(--yellow)'
+        badge.style.boxShadow = 'none'
       }
 
       $('bankroll').textContent = fmtUsd(s.bankroll)
@@ -802,6 +830,65 @@
       </table>`
     }
 
+    // Update trade history
+    async function refreshHistory() {
+      const r = await api('/history?limit=100')
+      if (!r) return
+
+      const body = $('historyBody')
+      $('historyCount').textContent = r.count
+
+      if (!r.trades || r.trades.length === 0) {
+        body.innerHTML = '<div class="empty-state"><div class="icon">///</div>NO TRADE HISTORY</div>'
+        return
+      }
+
+      // Summary stats
+      const wins = r.trades.filter(t => t.won === true)
+      const losses = r.trades.filter(t => t.won === false)
+      const totalPnl = r.trades.reduce((s, t) => s + (t.pnl || 0), 0)
+      const cumPnl = []
+      let running = 0
+      r.trades.forEach(t => { running += (t.pnl || 0); cumPnl.push(running) })
+
+      body.innerHTML = `
+        <div style="display: flex; gap: 24px; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); background: rgba(0,240,255,0.02);">
+          <div><span style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Total Trades</span><br><span style="font-family: Orbitron; font-weight: 700; color: var(--cyan);">${r.count}</span></div>
+          <div><span style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Wins</span><br><span style="font-family: Orbitron; font-weight: 700; color: var(--green);">${wins.length}</span></div>
+          <div><span style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Losses</span><br><span style="font-family: Orbitron; font-weight: 700; color: var(--red);">${losses.length}</span></div>
+          <div><span style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Win Rate</span><br><span style="font-family: Orbitron; font-weight: 700; color: var(--yellow);">${r.count > 0 ? fmt(wins.length / r.count * 100, 1) : '0'}%</span></div>
+          <div><span style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Cumulative P&L</span><br><span class="${pnlClass(totalPnl)}" style="font-family: Orbitron; font-weight: 700;">${totalPnl >= 0 ? '+' : '-'}${fmtUsd(totalPnl)}</span></div>
+        </div>
+        <table>
+          <tr>
+            <th>Time</th>
+            <th>Stream</th>
+            <th>Market</th>
+            <th>Dir</th>
+            <th>Size</th>
+            <th>Fill</th>
+            <th>Edge</th>
+            <th>P&L</th>
+            <th>Result</th>
+            <th>Bankroll</th>
+          </tr>
+          ${[...r.trades].reverse().map(t => `
+            <tr>
+              <td style="color: var(--text-dim)">${t.close_time ? t.close_time.slice(5, 19) : '--'}</td>
+              <td style="color: var(--magenta)">${t.stream_name || 'S' + t.stream}</td>
+              <td>${t.market_id}</td>
+              <td class="${t.direction === 'UP' ? 'dir-up' : 'dir-down'}">${t.direction}</td>
+              <td>${fmtUsd(t.size)}</td>
+              <td>${fmt(t.fill, 4)}</td>
+              <td>${fmtPct(t.edge, 2)}</td>
+              <td class="${pnlClass(t.pnl)}">${t.pnl >= 0 ? '+' : '-'}${fmtUsd(t.pnl)}</td>
+              <td style="color: ${t.won ? 'var(--green)' : 'var(--red)'}; font-weight: bold;">${t.status}</td>
+              <td style="color: var(--text-dim)">${fmtUsd(t.bankroll_after)}</td>
+            </tr>
+          `).join('')}
+        </table>`
+    }
+
     // Refresh all
     async function refreshAll() {
       await Promise.all([
@@ -809,6 +896,7 @@
         refreshPortfolio(),
         refreshMetrics(),
         refreshTrades(),
+        refreshHistory(),
         refreshDropped(),
       ])
     }

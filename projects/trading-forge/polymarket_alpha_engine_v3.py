@@ -776,7 +776,7 @@ class Exec:
 # RESOLUTION
 # ──────────────────────────────────────────────────────────────
 class Resolver:
-    def __init__(self,cfg,port): self.cfg=cfg; self.port=port; self._log=logging.getLogger("Res"); self._bh={}
+    def __init__(self,cfg,port,trade_log=None): self.cfg=cfg; self.port=port; self._log=logging.getLogger("Res"); self._bh={}; self._tlog=trade_log
     def resolve(self,r,won):
         # PnL: win → size*(1/fill - 1), loss → -size
         pnl=r.order.size*(1.0/r.fill - 1) if won and r.fill>0 else (-r.order.size if not won else 0)
@@ -800,6 +800,7 @@ class Resolver:
             self._bh[k].append((r.order.pm,out))
             ps,os=zip(*self._bh[k][-50:]); p.brier[k]=M.brier(list(ps),list(os))
         r.pnl=pnl; r.won=won; p.resolved.append(r)
+        if self._tlog: self._tlog.resolved(r,won,pnl,p.br)
         self._log.info(f"RESOLVE S{r.order.stream} {'WIN' if won else 'LOSS':4} PnL=${pnl:+.2f} BR=${p.br:.2f}")
         return pnl
 
@@ -846,6 +847,8 @@ class Dash:
 # ──────────────────────────────────────────────────────────────
 # LOGGER
 # ──────────────────────────────────────────────────────────────
+HISTORY_FILE = "./logs/trade_history.jsonl"
+
 class Log:
     def __init__(self):
         import os; os.makedirs("./logs",exist_ok=True)
@@ -856,6 +859,19 @@ class Log:
             "venue":r.order.venue,"dir":r.order.dir.value,"leg":r.order.leg,
             "size":r.order.size,"fill":r.fill,"pm":r.order.pm,"pk":r.order.pk,
             "edge":r.order.edge,"ev":r.order.ev,"note":r.order.note,"pnl":r.pnl})
+    def resolved(self,r,won,pnl,bankroll):
+        """Persist resolved trade to history file."""
+        o=r.order
+        self._w(HISTORY_FILE,{
+            "ts":datetime.now(timezone.utc).isoformat(),
+            "pid":getattr(o,'_pid',''),
+            "mid":o.mid,"s":o.stream,"venue":o.venue,
+            "dir":o.dir.value if isinstance(o.dir,Direction) else str(o.dir),
+            "leg":o.leg,"size":o.size,"fill":r.fill,
+            "pm":o.pm,"pk":o.pk,"edge":o.edge,"ev":o.ev,"kf":o.kf,
+            "note":o.note,"open_ts":o.ts,"close_ts":r.fts,
+            "pnl":pnl,"won":won,"bankroll":bankroll,
+        })
     def drop(self,reason,stream):
         self._w(self._d,{"ts":datetime.now(timezone.utc).isoformat(),"s":stream,"reason":reason})
     @staticmethod
@@ -863,6 +879,19 @@ class Log:
         try:
             with open(path,"a") as f: f.write(json.dumps(r)+"\n")
         except: pass
+    @staticmethod
+    def read_history():
+        """Load all resolved trades from persistent history."""
+        trades=[]
+        try:
+            with open(HISTORY_FILE,"r") as f:
+                for line in f:
+                    line=line.strip()
+                    if line:
+                        try: trades.append(json.loads(line))
+                        except: pass
+        except FileNotFoundError: pass
+        return trades
 
 # ──────────────────────────────────────────────────────────────
 # MAIN ORCHESTRATOR
@@ -878,7 +907,7 @@ class Engine:
         self.s4=StrikeArb(self.cfg,self.p,self.s); self.s5=OracleEdge(self.cfg,self.p)
         self.s6=LateRes(self.cfg,self.p); self.s7=MM(self.cfg,self.p)
         self.s8=Copy(self.cfg,self.p); self.exe=Exec(self.cfg,self.p)
-        self.res=Resolver(self.cfg,self.p); self.dash=Dash(self.p); self.log=Log()
+        self.log=Log(); self.res=Resolver(self.cfg,self.p,self.log); self.dash=Dash(self.p)
         self._c=0; self._log=logging.getLogger("Engine")
 
     def _resolve_expired(self):
