@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ALPHA ENGINE // TRADING FORGE</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+    :root {
+      --cyan: #00f0ff;
+      --magenta: #ff00ff;
+      --yellow: #ffd700;
+      --red: #ff003c;
+      --green: #00ff88;
+      --bg: #0a0a12;
+      --panel: #0d0d1a;
+      --border: #1a1a2e;
+      --text: #c0c0d0;
+      --text-dim: #555570;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px,
+        rgba(0, 0, 0, 0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(0, 240, 255, 0.03) 0%, transparent 100%);
+    }
+
+    .logo {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 20px;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+      letter-spacing: 3px;
+    }
+
+    .logo span { color: var(--magenta); }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+
+    .status-dot.active {
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .btn {
+      font-family: 'Share Tech Mono', monospace;
+      padding: 8px 20px;
+      border: 1px solid;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+    }
+
+    .btn-start {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .btn-start:hover {
+      background: rgba(0, 255, 136, 0.1);
+      box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+    }
+
+    .btn-stop {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    .btn-stop:hover {
+      background: rgba(255, 0, 60, 0.1);
+      box-shadow: 0 0 15px rgba(255, 0, 60, 0.3);
+    }
+
+    /* Dashboard grid */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      padding: 20px 24px;
+    }
+
+    /* Stat cards */
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--cyan), transparent);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .stat-value.positive { color: var(--green); }
+    .stat-value.negative { color: var(--red); }
+    .stat-value.neutral { color: var(--cyan); }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Panels */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 0 24px 24px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .panel-full {
+      grid-column: 1 / -1;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 240, 255, 0.02);
+    }
+
+    .panel-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+    }
+
+    .panel-body {
+      padding: 16px;
+      max-height: 350px;
+      overflow-y: auto;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: var(--bg); }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* Trades table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(26, 26, 46, 0.5);
+      white-space: nowrap;
+    }
+
+    tr:hover td { background: rgba(0, 240, 255, 0.03); }
+
+    .dir-up { color: var(--green); }
+    .dir-down { color: var(--red); }
+
+    /* Positions */
+    .position-card {
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .position-card:hover { border-color: var(--cyan); }
+    .position-card.expanded { border-color: var(--magenta); }
+    .position-card:last-child { margin-bottom: 0; }
+
+    .pos-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .pos-dir {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .pos-detail {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .pos-stream-tag {
+      font-size: 9px;
+      padding: 2px 6px;
+      border: 1px solid var(--magenta);
+      color: var(--magenta);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-top: 4px;
+      display: inline-block;
+    }
+
+    .pos-expand-hint {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    /* Deep dive panel */
+    .pos-deepdive {
+      display: none;
+      padding: 0 12px 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .position-card.expanded .pos-deepdive { display: block; }
+
+    .deepdive-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .dd-item {
+      padding: 6px 8px;
+      background: rgba(0, 240, 255, 0.03);
+      border-left: 2px solid var(--cyan);
+    }
+
+    .dd-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+
+    .dd-value {
+      font-size: 13px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+    }
+
+    .dd-value.edge-pos { color: var(--green); }
+    .dd-value.edge-neg { color: var(--red); }
+
+    .dd-note {
+      grid-column: 1 / -1;
+      padding: 8px;
+      background: rgba(255, 0, 255, 0.03);
+      border-left: 2px solid var(--magenta);
+      font-size: 11px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .dd-note .dd-label { color: var(--magenta); }
+
+    /* Metrics bar */
+    .metrics-bar {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1px;
+      background: var(--border);
+      margin: 0 24px 16px;
+      border: 1px solid var(--border);
+    }
+
+    .metric-item {
+      background: var(--panel);
+      padding: 12px 16px;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--yellow);
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-dim);
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    .empty-state .icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    /* Log feed */
+    .log-entry {
+      font-size: 11px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(26, 26, 46, 0.3);
+      display: flex;
+      gap: 10px;
+    }
+
+    .log-time { color: var(--text-dim); min-width: 70px; }
+    .log-type { min-width: 60px; font-weight: bold; }
+    .log-type.info { color: var(--cyan); }
+    .log-type.trade { color: var(--green); }
+    .log-type.drop { color: var(--yellow); }
+    .log-type.error { color: var(--red); }
+
+    /* Glitch effect on title */
+    @keyframes glitch {
+      0%, 100% { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
+      25% { text-shadow: -2px 0 var(--magenta), 2px 0 var(--cyan); }
+      50% { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
+      75% { text-shadow: 2px 0 var(--magenta), -2px 0 var(--cyan); }
+    }
+
+    .logo:hover { animation: glitch 0.3s ease; }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .dashboard { grid-template-columns: repeat(2, 1fr); }
+      .metrics-bar { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 768px) {
+      .panels { grid-template-columns: 1fr; }
+      .dashboard { grid-template-columns: 1fr; }
+      .metrics-bar { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">ALPHA <span>ENGINE</span> // TRADING FORGE</div>
+    <div class="header-status">
+      <div class="status-badge">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">OFFLINE</span>
+      </div>
+      <button class="btn btn-start" id="btnStart" onclick="startEngine()">START</button>
+      <button class="btn btn-stop" id="btnStop" onclick="stopEngine()">STOP</button>
+      <button class="btn btn-stop" style="color: var(--yellow); border-color: var(--yellow);" onclick="resetEngine()">RESET</button>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="dashboard">
+    <div class="stat-card">
+      <div class="stat-label">Bankroll</div>
+      <div class="stat-value neutral" id="bankroll">$0.00</div>
+      <div class="stat-sub" id="bankrollReturn">0.00% return</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total P&L</div>
+      <div class="stat-value neutral" id="totalPnl">$0.00</div>
+      <div class="stat-sub" id="dailyPnl">Daily: $0.00</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Drawdown</div>
+      <div class="stat-value neutral" id="drawdown">0.00%</div>
+      <div class="stat-sub">From peak</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Exposure</div>
+      <div class="stat-value neutral" id="exposure">0.00%</div>
+      <div class="stat-sub" id="posCount">0 positions</div>
+    </div>
+  </div>
+
+  <!-- Metrics Bar -->
+  <div class="metrics-bar">
+    <div class="metric-item">
+      <div class="metric-label">Total Trades</div>
+      <div class="metric-value" id="mTotalTrades">0</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-value" id="mWinRate">0%</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">Profit Factor</div>
+      <div class="metric-value" id="mProfitFactor">0.00</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">Avg Win</div>
+      <div class="metric-value" id="mAvgWin">$0</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">Avg Loss</div>
+      <div class="metric-value" id="mAvgLoss">$0</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">Signals Dropped</div>
+      <div class="metric-value" id="mDropped">0</div>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div class="panels">
+    <!-- Positions -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Open Positions</div>
+        <span id="positionsCount" style="font-size: 11px; color: var(--text-dim);">0</span>
+      </div>
+      <div class="panel-body" id="positionsBody">
+        <div class="empty-state">
+          <div class="icon">///</div>
+          NO OPEN POSITIONS
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Trades -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Recent Trades</div>
+        <span id="tradesCount" style="font-size: 11px; color: var(--text-dim);">0</span>
+      </div>
+      <div class="panel-body" id="tradesBody">
+        <div class="empty-state">
+          <div class="icon">///</div>
+          NO TRADES YET
+        </div>
+      </div>
+    </div>
+
+    <!-- Dropped Signals -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <div class="panel-title">Dropped Signals</div>
+        <span id="droppedCount" style="font-size: 11px; color: var(--text-dim);">0</span>
+      </div>
+      <div class="panel-body" id="droppedBody">
+        <div class="empty-state">
+          <div class="icon">///</div>
+          NO DROPPED SIGNALS
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = ''
+    const expandedPositions = new Set()
+
+    // Helpers
+    function $(id) { return document.getElementById(id) }
+    function fmt(n, d = 2) { return isNaN(n) || n == null ? '--' : Number(n).toFixed(d) }
+    function fmtUsd(n) { return isNaN(n) || n == null ? '$--' : '$' + fmt(Math.abs(n)) }
+    function fmtPct(n, d = 1) { return isNaN(n) || n == null ? '--' : fmt(n * 100, d) + '%' }
+    function pnlClass(n) { return n > 0 ? 'positive' : n < 0 ? 'negative' : 'neutral' }
+    function togglePos(id) { expandedPositions.has(id) ? expandedPositions.delete(id) : expandedPositions.add(id) }
+
+    function fmtCountdown(openTime, marketId, endTs) {
+      if (!openTime) return '--:--'
+      let endMs
+      if (endTs && endTs > 0) {
+        endMs = endTs * 1000
+      } else {
+        const durMatch = (marketId || '').match(/(\d+)m/i)
+        const durS = durMatch ? parseInt(durMatch[1]) * 60 : 15 * 60
+        endMs = new Date(openTime).getTime() + durS * 1000
+      }
+      const remaining = Math.max(0, (endMs - Date.now()) / 1000)
+      const m = Math.floor(remaining / 60)
+      const s = Math.floor(remaining % 60)
+      if (remaining <= 0) return 'RESOLVING'
+      return `${m}m ${String(s).padStart(2,'0')}s`
+    }
+
+    // API calls
+    async function api(path, method = 'GET') {
+      try {
+        const res = await fetch(API + path, { method })
+        return await res.json()
+      } catch (e) {
+        console.error(`API ${path}:`, e)
+        return null
+      }
+    }
+
+    // Engine control
+    async function startEngine() {
+      const r = await api('/start', 'POST')
+      if (r) refreshAll()
+    }
+
+    async function stopEngine() {
+      const r = await api('/stop', 'POST')
+      if (r) refreshAll()
+    }
+
+    async function resetEngine() {
+      const r = await api('/reset', 'POST')
+      expandedPositions.clear()
+      if (r) refreshAll()
+    }
+
+    // Update status
+    async function refreshStatus() {
+      const s = await api('/status')
+      if (!s) return
+
+      const dot = $('statusDot')
+      const txt = $('statusText')
+      if (s.running) {
+        dot.classList.add('active')
+        txt.textContent = 'LIVE'
+        txt.style.color = 'var(--green)'
+      } else {
+        dot.classList.remove('active')
+        txt.textContent = 'OFFLINE'
+        txt.style.color = 'var(--red)'
+      }
+
+      $('bankroll').textContent = fmtUsd(s.bankroll)
+      $('bankroll').className = 'stat-value neutral'
+
+      $('totalPnl').textContent = (s.total_pnl >= 0 ? '+' : '-') + fmtUsd(s.total_pnl)
+      $('totalPnl').className = 'stat-value ' + pnlClass(s.total_pnl)
+
+      $('dailyPnl').textContent = 'Daily: ' + (s.daily_pnl >= 0 ? '+' : '-') + fmtUsd(s.daily_pnl)
+
+      $('drawdown').textContent = fmt(s.drawdown * 100) + '%'
+      $('drawdown').className = 'stat-value ' + (s.drawdown > 0.05 ? 'negative' : 'neutral')
+
+      $('exposure').textContent = fmt(s.exposure * 100) + '%'
+      $('posCount').textContent = s.num_positions + ' position' + (s.num_positions !== 1 ? 's' : '')
+    }
+
+    // Update portfolio
+    async function refreshPortfolio() {
+      const p = await api('/portfolio')
+      if (!p) return
+
+      $('bankrollReturn').textContent = fmt(p.total_return * 100) + '% return'
+
+      // Positions
+      const body = $('positionsBody')
+      $('positionsCount').textContent = p.positions.length
+
+      if (p.positions.length === 0) {
+        body.innerHTML = '<div class="empty-state"><div class="icon">///</div>NO OPEN POSITIONS</div>'
+        return
+      }
+
+      body.innerHTML = p.positions.map(pos => {
+        const pid = pos.position_id
+        const isOpen = expandedPositions.has(pid)
+        const hasData = pos.p_model != null && pos.p_model !== undefined
+        return `
+        <div class="position-card ${isOpen ? 'expanded' : ''}" onclick="togglePos('${pid}'); this.classList.toggle('expanded')">
+          <div class="pos-summary">
+            <div>
+              <div class="pos-dir ${pos.direction === 'UP' ? 'dir-up' : 'dir-down'}">${pos.direction}</div>
+              <div class="pos-detail">${pos.market_id}</div>
+              ${pos.stream_name ? `<div class="pos-stream-tag">${pos.stream_name}</div>` : ''}
+            </div>
+            <div style="text-align: right;">
+              <div>${fmtUsd(pos.size)}</div>
+              <div class="pos-detail">@ ${fmt(pos.entry_price, 4)}</div>
+              <div class="pos-time" style="font-size: 11px; color: var(--yellow); margin-top: 2px;">${fmtCountdown(pos.open_time, pos.market_id, pos.end_ts)}</div>
+              <div class="pos-expand-hint">${isOpen ? 'CLICK TO CLOSE' : 'CLICK TO INSPECT'}</div>
+            </div>
+          </div>
+          <div class="pos-deepdive">
+            ${hasData ? `
+            <div class="deepdive-grid">
+              <div class="dd-item">
+                <div class="dd-label">Model Prob</div>
+                <div class="dd-value">${fmtPct(pos.p_model)}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Market Prob</div>
+                <div class="dd-value">${fmtPct(pos.p_market)}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Edge</div>
+                <div class="dd-value ${pos.edge > 0 ? 'edge-pos' : 'edge-neg'}">${fmtPct(pos.edge, 2)}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Expected Value</div>
+                <div class="dd-value ${pos.ev > 0 ? 'edge-pos' : 'edge-neg'}">${fmtUsd(pos.ev)}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Kelly Fraction</div>
+                <div class="dd-value">${fmtPct(pos.kelly_f, 2)}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Venue</div>
+                <div class="dd-value" style="font-size: 11px;">${pos.venue || '--'}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Leg</div>
+                <div class="dd-value" style="font-size: 11px;">${pos.leg || '--'}</div>
+              </div>
+              <div class="dd-item">
+                <div class="dd-label">Opened</div>
+                <div class="dd-value" style="font-size: 11px;">${pos.open_time ? pos.open_time.slice(11, 19) : '--'}</div>
+              </div>
+              ${pos.note ? `<div class="dd-note"><div class="dd-label">Reasoning</div>${pos.note}</div>` : ''}
+            </div>
+            ` : `<div style="padding: 12px; color: var(--text-dim); font-size: 11px;">Reasoning data not available — position opened before deep-dive patch. Restart engine to capture new positions with full data.</div>`}
+          </div>
+        </div>`
+      }).join('')
+    }
+
+    // Update metrics
+    async function refreshMetrics() {
+      const m = await api('/metrics')
+      if (!m) return
+
+      $('mTotalTrades').textContent = m.total_trades
+      $('mWinRate').textContent = fmt(m.win_rate * 100, 1) + '%'
+      $('mProfitFactor').textContent = fmt(m.profit_factor)
+      $('mAvgWin').textContent = fmtUsd(m.avg_win)
+      $('mAvgLoss').textContent = fmtUsd(m.avg_loss)
+      $('mDropped').textContent = m.dropped_signals
+    }
+
+    // Update trades
+    async function refreshTrades() {
+      const r = await api('/trades?limit=20')
+      if (!r) return
+
+      const body = $('tradesBody')
+      $('tradesCount').textContent = r.count
+
+      if (!r.trades || r.trades.length === 0) {
+        body.innerHTML = '<div class="empty-state"><div class="icon">///</div>NO TRADES YET</div>'
+        return
+      }
+
+      body.innerHTML = `<table>
+        <tr>
+          <th>Direction</th>
+          <th>Size</th>
+          <th>Entry</th>
+          <th>Edge</th>
+          <th>P&L</th>
+          <th>Time</th>
+        </tr>
+        ${r.trades.reverse().map(t => `
+          <tr>
+            <td class="${t.direction === 'UP' ? 'dir-up' : 'dir-down'}">${t.direction}</td>
+            <td>${fmtUsd(t.size)}</td>
+            <td>${fmt(t.entry_price, 4)}</td>
+            <td>${fmt(t.signal_edge, 4)}</td>
+            <td class="${pnlClass(t.pnl)}">${t.pnl >= 0 ? '+' : '-'}${fmtUsd(t.pnl)}</td>
+            <td style="color: var(--text-dim)">${t.open_time ? t.open_time.slice(11, 19) : '--'}</td>
+          </tr>
+        `).join('')}
+      </table>`
+    }
+
+    // Update dropped signals
+    async function refreshDropped() {
+      const r = await api('/dropped-signals?limit=20')
+      if (!r) return
+
+      const body = $('droppedBody')
+      $('droppedCount').textContent = r.count
+
+      if (!r.dropped_signals || r.dropped_signals.length === 0) {
+        body.innerHTML = '<div class="empty-state"><div class="icon">///</div>NO DROPPED SIGNALS</div>'
+        return
+      }
+
+      body.innerHTML = `<table>
+        <tr>
+          <th>Direction</th>
+          <th>Edge</th>
+          <th>Stage</th>
+          <th>Reason</th>
+          <th>Details</th>
+        </tr>
+        ${r.dropped_signals.reverse().map(d => `
+          <tr>
+            <td class="${d.direction === 'UP' ? 'dir-up' : 'dir-down'}">${d.direction}</td>
+            <td>${fmt(d.edge, 4)}</td>
+            <td style="color: var(--yellow)">${d.stage}</td>
+            <td>${d.reason}</td>
+            <td style="color: var(--text-dim); max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${d.details}</td>
+          </tr>
+        `).join('')}
+      </table>`
+    }
+
+    // Refresh all
+    async function refreshAll() {
+      await Promise.all([
+        refreshStatus(),
+        refreshPortfolio(),
+        refreshMetrics(),
+        refreshTrades(),
+        refreshDropped(),
+      ])
+    }
+
+    // Boot
+    refreshAll()
+    setInterval(refreshAll, 3000)
+  </script>
+</body>
+</html>

@@ -4,4 +4,10 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-projects/
+*:Zone.Identifier
+
+# Ignore all projects except trading-forge
+projects/*
+!projects/trading-forge/
+projects/trading-forge/__pycache__/
+projects/trading-forge/logs/
