@@ -261,6 +261,12 @@ async def get_metrics():
     return get_orchestrator().get_metrics()
 
 
+@app.get("/feed-activity")
+async def get_feed_activity(limit: int = 100):
+    """Get live data feed activity and discovered markets."""
+    return get_orchestrator().get_feed_activity(limit=limit)
+
+
 # =============================================================================
 # CONTROL ENDPOINTS
 # =============================================================================
@@ -379,6 +385,9 @@ async def get_trades(limit: int = 50):
     """
     orch = get_orchestrator()
     trades_data = orch.get_trades(limit=limit)
+    # Fall back to history if no session trades yet
+    if not trades_data:
+        trades_data = orch.get_history(limit=limit)
     return {
         "count": len(trades_data),
         "trades": trades_data
@@ -387,35 +396,9 @@ async def get_trades(limit: int = 50):
 
 @app.get("/dropped-signals")
 async def get_dropped_signals(limit: int = 50):
-    """
-    Get list of dropped signals with reasons.
-    
-    Args:
-        limit: Maximum number of dropped signals to return (default 50)
-        
-    Returns:
-        List of dropped signals
-    """
+    """Get dropped signals from current session."""
     orch = get_orchestrator()
-    
-    dropped = orch.dropped_signals[-limit:]
-    
-    dropped_data = []
-    for ds in dropped:
-        signal = ds.signal
-        dropped_data.append({
-            "market_id": signal.market_id,
-            "direction": signal.direction.value if isinstance(signal.direction, Direction) else str(signal.direction),
-            "p_model": signal.p_model,
-            "p_market": signal.p_market,
-            "edge": signal.edge,
-            "consensus": signal.consensus_score,
-            "stage": ds.stage.value if isinstance(ds.stage, SignalStage) else str(ds.stage),
-            "reason": ds.reason.value if isinstance(ds.reason, DropReason) else str(ds.reason),
-            "details": ds.details,
-            "timestamp": datetime.utcnow().isoformat()  # Approximation
-        })
-    
+    dropped_data = orch.get_dropped(limit=limit)
     return {
         "count": len(dropped_data),
         "dropped_signals": dropped_data

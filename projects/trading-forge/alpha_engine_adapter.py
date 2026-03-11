@@ -358,6 +358,27 @@ class AlphaEngineAdapter:
                 })
         return result
 
+    def get_dropped(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get dropped signals from current session."""
+        stream_labels = {1:"Directional",2:"Intra-Arb",3:"Cross-Arb",4:"Strike-Arb",
+                         5:"Oracle-Edge",6:"Late-Res",7:"Market-Making",8:"Copy"}
+        drops = self._engine.log.recent_drops[-limit:]
+        result = []
+        for d in drops:
+            s = d.get("s", 0)
+            result.append({
+                "market_id": d.get("mid", ""),
+                "direction": d.get("dir", ""),
+                "edge": d.get("edge", 0),
+                "stage": d.get("stage", ""),
+                "reason": d.get("reason", ""),
+                "stream": s,
+                "stream_name": stream_labels.get(s, f"S{s}"),
+                "details": d.get("reason", ""),
+                "timestamp": d.get("ts", ""),
+            })
+        return result
+
     def get_history(self, limit: int = 200) -> List[Dict[str, Any]]:
         """Get full persistent trade history (survives restarts)."""
         # Reload from disk to pick up trades written this session
@@ -392,6 +413,47 @@ class AlphaEngineAdapter:
                 "timestamp": t.get("ts", ""),
             })
         return result
+
+    def get_feed_activity(self, limit: int = 100) -> Dict[str, Any]:
+        """Get recent feed activity and live market state for UI."""
+        feeds = self._engine.feeds
+        state = self._engine.s
+        # Feed log entries
+        entries = []
+        for e in list(feeds.feed_log)[-limit:]:
+            entries.append({
+                "timestamp": datetime.fromtimestamp(e["ts"]).isoformat() if e.get("ts") else "",
+                "feed": e.get("feed", ""),
+                "message": e.get("msg", ""),
+                "type": e.get("type", ""),
+            })
+        entries.reverse()  # newest first
+        # Live markets from state
+        live_markets = []
+        for m in state.markets:
+            remaining = max(0, int(m.end_ts - time.time()))
+            live_markets.append({
+                "market_id": m.market_id,
+                "duration": m.dur.value if hasattr(m.dur, 'value') else str(m.dur),
+                "yes_bid": m.yes_bid,
+                "yes_ask": m.yes_ask,
+                "no_bid": m.no_bid,
+                "no_ask": m.no_ask,
+                "end_ts": m.end_ts,
+                "remaining_s": remaining,
+                "strike": m.strike,
+            })
+        return {
+            "btc_price": state.btc,
+            "cvd": state.cvd,
+            "funding_rate": state.fund,
+            "open_interest": state.oi,
+            "iv_atm": state.iv_atm,
+            "total_discovered": len(feeds._seen_slugs),
+            "live_market_count": len(state.markets),
+            "live_markets": live_markets,
+            "feed_entries": entries,
+        }
 
     def get_metrics(self) -> Dict[str, Any]:
         # Combine current session + history for complete metrics

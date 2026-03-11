@@ -418,6 +418,46 @@
     .log-type.drop { color: var(--yellow); }
     .log-type.error { color: var(--red); }
 
+    /* Feed activity */
+    .feed-stats {
+      display: flex; gap: 16px; padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 240, 255, 0.02);
+      flex-wrap: wrap;
+    }
+    .feed-stat {
+      text-align: center;
+    }
+    .feed-stat-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim);
+    }
+    .feed-stat-value {
+      font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700;
+    }
+    .feed-entry {
+      font-size: 11px; padding: 3px 0;
+      border-bottom: 1px solid rgba(26, 26, 46, 0.2);
+      display: flex; gap: 8px; align-items: baseline;
+    }
+    .feed-ts { color: var(--text-dim); min-width: 65px; font-size: 10px; }
+    .feed-source { min-width: 110px; font-weight: bold; }
+    .feed-source.price { color: var(--cyan); }
+    .feed-source.markets { color: var(--magenta); }
+    .feed-source.discovery { color: var(--green); }
+    .feed-source.volume { color: var(--yellow); }
+    .feed-source.funding { color: #a78bfa; }
+    .feed-source.oi { color: #f97316; }
+    .feed-source.vol { color: #ec4899; }
+    .feed-msg { color: var(--text); }
+
+    .live-market-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid rgba(26, 26, 46, 0.2); font-size: 11px;
+    }
+    .live-market-slug { color: var(--cyan); min-width: 180px; }
+    .live-market-prices { color: var(--text); }
+    .live-market-timer { color: var(--yellow); font-family: 'Orbitron', sans-serif; font-size: 10px; min-width: 60px; text-align: right; }
+
     /* Glitch effect on title */
     @keyframes glitch {
       0%, 100% { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
@@ -512,6 +552,29 @@
 
   <!-- Panels -->
   <div class="panels">
+    <!-- Market Scanner / Feed Activity -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <div class="panel-title">Market Scanner</div>
+        <span id="feedStatus" style="font-size: 11px; color: var(--text-dim);">waiting...</span>
+      </div>
+      <div class="feed-stats" id="feedStats"></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border);">
+        <div style="border-right: 1px solid var(--border);">
+          <div style="padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--magenta); border-bottom: 1px solid var(--border);">Live Markets</div>
+          <div class="panel-body" id="liveMarketsBody" style="max-height: 200px;">
+            <div class="empty-state" style="padding: 20px;">Scanning...</div>
+          </div>
+        </div>
+        <div>
+          <div style="padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); border-bottom: 1px solid var(--border);">Feed Activity</div>
+          <div class="panel-body" id="feedLogBody" style="max-height: 200px;">
+            <div class="empty-state" style="padding: 20px;">Waiting for data...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Positions -->
     <div class="panel">
       <div class="panel-header">
@@ -777,21 +840,23 @@
 
       body.innerHTML = `<table>
         <tr>
-          <th>Direction</th>
+          <th>Stream</th>
+          <th>Market</th>
+          <th>Dir</th>
           <th>Size</th>
-          <th>Entry</th>
-          <th>Edge</th>
+          <th>Fill</th>
           <th>P&L</th>
-          <th>Time</th>
+          <th>Result</th>
         </tr>
-        ${r.trades.reverse().map(t => `
+        ${[...r.trades].reverse().map(t => `
           <tr>
+            <td style="color: var(--magenta)">${t.stream_name || ''}</td>
+            <td>${t.market_id}</td>
             <td class="${t.direction === 'UP' ? 'dir-up' : 'dir-down'}">${t.direction}</td>
             <td>${fmtUsd(t.size)}</td>
-            <td>${fmt(t.entry_price, 4)}</td>
-            <td>${fmt(t.signal_edge, 4)}</td>
+            <td>${fmt(t.fill || t.entry_price, 4)}</td>
             <td class="${pnlClass(t.pnl)}">${t.pnl >= 0 ? '+' : '-'}${fmtUsd(t.pnl)}</td>
-            <td style="color: var(--text-dim)">${t.open_time ? t.open_time.slice(11, 19) : '--'}</td>
+            <td style="color: ${t.won || t.status === 'WON' ? 'var(--green)' : 'var(--red)'}; font-weight: bold;">${t.status}</td>
           </tr>
         `).join('')}
       </table>`
@@ -889,6 +954,58 @@
         </table>`
     }
 
+    // Update feed activity / market scanner
+    async function refreshFeedActivity() {
+      const r = await api('/feed-activity?limit=50')
+      if (!r) return
+
+      // Stats bar
+      const stats = $('feedStats')
+      stats.innerHTML = `
+        <div class="feed-stat"><div class="feed-stat-label">BTC Price</div><div class="feed-stat-value" style="color: var(--cyan);">${r.btc_price > 0 ? '$' + Number(r.btc_price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">CVD</div><div class="feed-stat-value" style="color: var(--yellow);">${r.cvd ? (r.cvd > 0 ? '+' : '') + fmt(r.cvd, 2) : '--'}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">Funding</div><div class="feed-stat-value" style="color: #a78bfa;">${r.funding_rate ? fmt(r.funding_rate * 100, 4) + '%' : '--'}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">Open Interest</div><div class="feed-stat-value" style="color: #f97316;">${r.open_interest > 0 ? '$' + fmt(r.open_interest / 1e9, 2) + 'B' : '--'}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">IV (DVOL)</div><div class="feed-stat-value" style="color: #ec4899;">${r.iv_atm > 0 ? fmt(r.iv_atm * 100, 1) + '%' : '--'}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">Discovered</div><div class="feed-stat-value" style="color: var(--green);">${r.total_discovered}</div></div>
+        <div class="feed-stat"><div class="feed-stat-label">Live Markets</div><div class="feed-stat-value" style="color: var(--magenta);">${r.live_market_count}</div></div>
+      `
+      $('feedStatus').textContent = r.btc_price > 0 ? 'ACTIVE' : 'CONNECTING...'
+      $('feedStatus').style.color = r.btc_price > 0 ? 'var(--green)' : 'var(--yellow)'
+
+      // Live markets
+      const mkts = $('liveMarketsBody')
+      if (r.live_markets && r.live_markets.length > 0) {
+        mkts.innerHTML = r.live_markets.map(m => {
+          const rm = Math.floor(m.remaining_s / 60)
+          const rs = m.remaining_s % 60
+          const timer = m.remaining_s <= 0 ? 'RESOLVING' : rm + 'm ' + String(rs).padStart(2,'0') + 's'
+          return `<div class="live-market-row">
+            <span class="live-market-slug">${m.market_id}</span>
+            <span class="live-market-prices">UP ${fmt(m.yes_ask,3)} / DN ${fmt(m.no_ask,3)}</span>
+            <span class="live-market-timer">${timer}</span>
+          </div>`
+        }).join('')
+      } else {
+        mkts.innerHTML = '<div class="empty-state" style="padding: 20px;">No live markets found — polling every 10s</div>'
+      }
+
+      // Feed log
+      const flog = $('feedLogBody')
+      if (r.feed_entries && r.feed_entries.length > 0) {
+        flog.innerHTML = r.feed_entries.slice(0, 30).map(e => {
+          const ts = e.timestamp ? e.timestamp.slice(11, 19) : ''
+          return `<div class="feed-entry">
+            <span class="feed-ts">${ts}</span>
+            <span class="feed-source ${e.type}">${e.feed}</span>
+            <span class="feed-msg">${e.message}</span>
+          </div>`
+        }).join('')
+      } else {
+        flog.innerHTML = '<div class="empty-state" style="padding: 20px;">Waiting for feed data...</div>'
+      }
+    }
+
     // Refresh all
     async function refreshAll() {
       await Promise.all([
@@ -898,6 +1015,7 @@
         refreshTrades(),
         refreshHistory(),
         refreshDropped(),
+        refreshFeedActivity(),
       ])
     }
 
