@@ -11,3 +11,5 @@ projects/*
 !projects/trading-forge/
 projects/trading-forge/__pycache__/
 projects/trading-forge/logs/
+projects/trading-forge/.bt_cache/
+projects/trading-forge/anthropic_usage.sh
