@@ -1,8 +1,10 @@
-"""Dedicated MiniMax M2.5 API handler using httpx directly.
+"""Dedicated MiniMax M2.7 API handler using httpx directly.
 
 Talks to MiniMax's Anthropic-compatible endpoint without the Anthropic SDK,
 giving us full control over request/response handling and proper preservation
 of thinking blocks for interleaved reasoning.
+
+M2.7 features: self-evolution capabilities, 204K context, improved tool use.
 """
 from __future__ import annotations
 

@@ -183,6 +183,96 @@
       background: rgba(57,255,20,0.15);
       box-shadow: 0 0 12px rgba(57,255,20,0.4);
     }
+    .cyber-btn-iterate {
+      border-color: var(--neon-purple);
+      color: var(--neon-purple);
+    }
+    .cyber-btn-iterate:hover {
+      background: rgba(184,41,255,0.15);
+      box-shadow: 0 0 12px rgba(184,41,255,0.4);
+    }
+    .cyber-btn-iterate.active {
+      background: rgba(184,41,255,0.2);
+      box-shadow: 0 0 16px rgba(184,41,255,0.5);
+    }
+
+    .badge-iteration {
+      background: rgba(184,41,255,0.1);
+      color: var(--neon-purple);
+      border-color: rgba(184,41,255,0.4);
+    }
+
+    /* Iteration panel */
+    .iteration-panel {
+      border-top: 1px solid var(--border-dim);
+      background: rgba(184,41,255,0.03);
+    }
+    .iteration-panel .iter-metric {
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      font-family: 'Orbitron', monospace;
+    }
+    .iteration-panel .iter-bar {
+      height: 4px;
+      background: var(--border-dim);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .iteration-panel .iter-bar-fill {
+      height: 100%;
+      background: var(--neon-purple);
+      transition: width 0.3s;
+      border-radius: 2px;
+    }
+    .iteration-modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .iteration-modal {
+      background: var(--bg-card);
+      border: 1px solid var(--neon-purple);
+      box-shadow: 0 0 30px rgba(184,41,255,0.3);
+      border-radius: 6px;
+      padding: 1.5rem;
+      width: 420px;
+      max-width: 90vw;
+    }
+    .iteration-modal h3 {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--neon-purple);
+      margin-bottom: 1rem;
+    }
+    .iteration-modal label {
+      font-size: 0.7rem;
+      color: var(--text-mid);
+      display: block;
+      margin-bottom: 0.25rem;
+      letter-spacing: 0.05em;
+    }
+    .iteration-modal input {
+      width: 100%;
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dim);
+      color: var(--text-bright);
+      padding: 0.5rem;
+      border-radius: 3px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8rem;
+      margin-bottom: 0.75rem;
+    }
+    .iteration-modal input:focus {
+      outline: none;
+      border-color: var(--neon-purple);
+      box-shadow: 0 0 8px rgba(184,41,255,0.2);
+    }
+    .iteration-modal .modal-actions {
+      display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;
+    }
 
     .spinner { animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -777,7 +867,7 @@
     <div class="flex items-center gap-3">
       <h1 id="header-title" class="text-sm font-black tracking-widest glow-cyan" style="font-family:'Orbitron',monospace">SOPHIA</h1>
       <span class="text-xs" style="color: var(--text-dim)">// AUTONOMOUS AGENT</span>
-      <span class="badge badge-minimax">MINIMAX M2.5</span>
+      <span class="badge badge-minimax">MINIMAX M2.7</span>
     </div>
     <div class="flex items-center gap-4">
       <div id="tool-indicators" class="flex items-center gap-2"></div>
@@ -927,6 +1017,26 @@
           <button id="cancel-btn" class="cyber-btn cyber-btn-stop px-3 py-1 rounded text-xs hidden">CANCEL</button>
         </div>
       </div>
+      <!-- Iteration status (shown when iteration is active) -->
+      <div id="iteration-panel" class="iteration-panel hidden px-4 py-2 mt-2 rounded" style="border-radius:4px">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span class="badge badge-iteration" id="iter-status-badge">IDLE</span>
+            <span class="iter-metric" style="color:var(--text-mid)" id="iter-phase"></span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="iter-metric" style="color:var(--neon-purple)" id="iter-cycle">CYCLE 0/50</span>
+            <span class="iter-metric" style="color:var(--text-mid)" id="iter-tokens">0 TOKENS</span>
+          </div>
+        </div>
+        <div class="iter-bar mt-1">
+          <div class="iter-bar-fill" id="iter-budget-bar" style="width:0%"></div>
+        </div>
+        <div class="flex justify-between mt-1">
+          <span class="text-xs" style="color:var(--text-dim);font-size:0.55rem" id="iter-budget-label">BUDGET: 0% USED</span>
+          <span class="text-xs" style="color:var(--text-dim);font-size:0.55rem" id="iter-project-label"></span>
+        </div>
+      </div>
       <!-- Sub-agent cards -->
       <div id="subagent-cards" class="flex flex-wrap gap-2"></div>
       <!-- Progress notes (last 5) -->
@@ -940,6 +1050,9 @@
       <input id="input" type="text" placeholder="// ENTER TASK OR MESSAGE..."
              autocomplete="off"
              class="cyber-input flex-1 rounded px-4 py-2.5 text-sm">
+      <button id="iterate-btn" type="button" class="cyber-btn cyber-btn-iterate px-4 py-2.5 rounded" title="Start self-iteration on a project">
+        ITERATE
+      </button>
       <button id="send-btn" type="submit" class="cyber-btn px-6 py-2.5 rounded">
         EXEC
       </button>
@@ -974,6 +1087,23 @@
     </aside>
   </div>
 
+  <!-- Iteration Modal -->
+  <div id="iteration-modal-overlay" class="iteration-modal-overlay hidden">
+    <div class="iteration-modal">
+      <h3>SELF-ITERATION MODE</h3>
+      <label>PROJECT PATH (relative to workspace)</label>
+      <input id="iter-project-path" type="text" placeholder="projects/my-project" value="projects/">
+      <label>MAX CYCLES</label>
+      <input id="iter-max-cycles" type="number" value="50" min="1" max="500">
+      <label>TOKEN BUDGET</label>
+      <input id="iter-token-budget" type="number" value="5000000" min="100000" step="100000">
+      <div class="modal-actions">
+        <button id="iter-modal-cancel" type="button" class="cyber-btn cyber-btn-stop px-4 py-1.5 rounded text-xs">CANCEL</button>
+        <button id="iter-modal-start" type="button" class="cyber-btn cyber-btn-iterate px-4 py-1.5 rounded text-xs">START ITERATION</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const messagesEl   = document.getElementById('messages');
     const placeholder  = document.getElementById('placeholder');
@@ -1002,6 +1132,20 @@
     const pauseBtn        = document.getElementById('pause-btn');
     const resumeBtn       = document.getElementById('resume-btn');
     const cancelBtn       = document.getElementById('cancel-btn');
+
+    // Iteration elements
+    const iterateBtn        = document.getElementById('iterate-btn');
+    const iterModalOverlay  = document.getElementById('iteration-modal-overlay');
+    const iterModalCancel   = document.getElementById('iter-modal-cancel');
+    const iterModalStart    = document.getElementById('iter-modal-start');
+    const iterPanel         = document.getElementById('iteration-panel');
+    const iterStatusBadge   = document.getElementById('iter-status-badge');
+    const iterPhase         = document.getElementById('iter-phase');
+    const iterCycle         = document.getElementById('iter-cycle');
+    const iterTokens        = document.getElementById('iter-tokens');
+    const iterBudgetBar     = document.getElementById('iter-budget-bar');
+    const iterBudgetLabel   = document.getElementById('iter-budget-label');
+    const iterProjectLabel  = document.getElementById('iter-project-label');
     const toolFeed        = document.getElementById('tool-feed');
     const toolCountEl     = document.getElementById('tool-count');
 
@@ -1378,6 +1522,115 @@
 
     cancelBtn.addEventListener('click', () => {
       if (ws) ws.send(JSON.stringify({ type: 'cancel' }));
+    });
+
+    /* ---- Iteration Controls ---- */
+
+    let iterationPolling = null;
+
+    iterateBtn.addEventListener('click', () => {
+      // If iteration is active, send stop command
+      if (iterateBtn.classList.contains('active')) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'message',
+            content: 'Stop the iteration session. Use stop_iteration tool.'
+          }));
+        }
+        return;
+      }
+      iterModalOverlay.classList.remove('hidden');
+    });
+
+    iterModalCancel.addEventListener('click', () => {
+      iterModalOverlay.classList.add('hidden');
+    });
+
+    iterModalOverlay.addEventListener('click', (e) => {
+      if (e.target === iterModalOverlay) iterModalOverlay.classList.add('hidden');
+    });
+
+    iterModalStart.addEventListener('click', () => {
+      const projectPath = document.getElementById('iter-project-path').value.trim();
+      const maxCycles = document.getElementById('iter-max-cycles').value;
+      const tokenBudget = document.getElementById('iter-token-budget').value;
+
+      if (!projectPath) return;
+
+      iterModalOverlay.classList.add('hidden');
+
+      // Send iteration start command as a user message
+      const msg = `Start self-iteration on the project at "${projectPath}" with max_cycles=${maxCycles} and token_budget=${tokenBudget}. Use the start_iteration tool, then follow the full iteration workflow: discovery -> baseline -> iterate.`;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'message', content: msg }));
+        input.value = '';
+      }
+
+      // Start polling iteration status
+      startIterationPolling();
+    });
+
+    function startIterationPolling() {
+      if (iterationPolling) return;
+      iterationPolling = setInterval(pollIterationStatus, 3000);
+      pollIterationStatus();
+    }
+
+    function stopIterationPolling() {
+      if (iterationPolling) {
+        clearInterval(iterationPolling);
+        iterationPolling = null;
+      }
+    }
+
+    async function pollIterationStatus() {
+      try {
+        const r = await fetch('/api/iteration');
+        const data = await r.json();
+        updateIterationPanel(data);
+      } catch (e) {
+        // ignore fetch errors
+      }
+    }
+
+    function updateIterationPanel(data) {
+      if (!data) return;
+
+      const isActive = data.active;
+      const hasHistory = data.metrics_history && data.metrics_history.length > 0;
+
+      iterPanel.classList.toggle('hidden', !isActive && !hasHistory);
+      iterateBtn.classList.toggle('active', isActive);
+      iterateBtn.textContent = isActive ? 'STOP ITER' : 'ITERATE';
+
+      if (!isActive && !hasHistory) {
+        stopIterationPolling();
+        return;
+      }
+
+      iterStatusBadge.textContent = (data.status || 'idle').toUpperCase();
+      iterPhase.textContent = data.phase ? data.phase.replace(/_/g, ' ').toUpperCase() : '';
+      iterCycle.textContent = `CYCLE ${data.current_cycle}/${data.max_cycles}`;
+
+      const tokensK = Math.round(data.total_tokens_used / 1000);
+      iterTokens.textContent = tokensK > 0 ? `${tokensK}K TOKENS` : '0 TOKENS';
+
+      const pct = data.budget_pct_used || 0;
+      iterBudgetBar.style.width = pct + '%';
+      iterBudgetLabel.textContent = `BUDGET: ${pct}% USED`;
+      iterProjectLabel.textContent = data.project_path || '';
+
+      if (!isActive) {
+        stopIterationPolling();
+      }
+    }
+
+    // Check iteration status on page load
+    pollIterationStatus().then(r => {
+      // If iteration is active, start polling
+      fetch('/api/iteration').then(r => r.json()).then(data => {
+        if (data && data.active) startIterationPolling();
+      }).catch(() => {});
     });
 
     /* ---- WebSocket ---- */

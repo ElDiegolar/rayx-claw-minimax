@@ -14,6 +14,7 @@ from persona import load_persona
 from rate_limiter import RateLimiter
 from storage import HistoryStore, TaskStateStore
 from subagent_manager import SubAgentManager
+from iteration_engine import iteration_engine
 from tools import ORCHESTRATOR_TOOLS, execute_tool, execute_tool_async, memory_store
 
 log = logging.getLogger(__name__)
@@ -121,6 +122,11 @@ class AutonomousOrchestrator:
 
         # Override tool docs for autonomous mode
         system += "\n\n" + (
+            "WORKSPACE RESTRICTION:\n"
+            f"You are STRICTLY confined to the project workspace: {settings.workspace}\n"
+            "ALL file operations (read, write, list, search, grep) and ALL shell commands "
+            "MUST stay within this directory. You CANNOT access, read, write, or reference "
+            "any files or paths outside this workspace. This applies to you AND all sub-agents.\n\n"
             "AUTONOMOUS MODE INSTRUCTIONS:\n"
             "You are running in autonomous mode. You are the COORDINATOR — your job is to "
             "delegate work and stay responsive to the user at all times.\n\n"
@@ -150,6 +156,61 @@ class AutonomousOrchestrator:
         mem_context = memory_store.get_context()
         if mem_context:
             system += "\n\n" + mem_context
+
+        # Inject iteration mode context
+        if iteration_engine.is_active:
+            state = iteration_engine.state
+            system += "\n\n" + (
+                "SELF-ITERATION MODE ACTIVE\n"
+                "==========================\n"
+                f"Project: {state.project_path}\n"
+                f"Status: {state.status} ({state.phase})\n"
+                f"Cycle: {state.current_cycle} / {state.max_cycles}\n"
+                f"Tokens used: {state.total_tokens_used:,} / {state.token_budget:,}\n\n"
+                "ITERATION WORKFLOW:\n"
+                "You are running in self-iteration mode. Follow this lifecycle:\n\n"
+                "PHASE 1 — DISCOVERY (status: discovering)\n"
+                "  Spin up a discovery team (2-3 sub-agents in parallel):\n"
+                "  - 'analyzer': Read project files, understand architecture and purpose\n"
+                "  - 'metric-finder': Determine measurable success metrics and how to collect them\n"
+                "  - 'strategy-planner': Propose iteration strategies based on project type\n"
+                "  When all complete, call set_iteration_plan with their combined findings.\n\n"
+                "PHASE 2 — BASELINE (status: baselining)\n"
+                "  Delegate to a 'runner' sub-agent to execute the project and collect baseline metrics.\n"
+                "  Call record_iteration_metrics with the baseline results.\n\n"
+                "PHASE 3 — ITERATE (status: iterating)\n"
+                "  For each cycle:\n"
+                "  a) Call advance_iteration_cycle to move to next cycle\n"
+                "  b) Create a checkpoint with iteration_checkpoint\n"
+                "  c) Delegate to a team:\n"
+                "     - 'researcher': Analyze metrics history, decide what to improve, research approach\n"
+                "     - 'implementer': Make the code changes based on researcher's plan\n"
+                "     - 'validator': Run the project, collect new metrics, compare with previous\n"
+                "  d) Based on validator results, call record_iteration_metrics with kept=true/false\n"
+                "  e) If changes hurt metrics, use iteration_revert and record kept=false\n"
+                "  f) Check iteration_status for budget — stop if running low\n"
+                "  g) Loop back to (a) unless stopping conditions met\n\n"
+                "STOPPING CONDITIONS:\n"
+                "- Token budget exhausted (advance_iteration_cycle handles this automatically)\n"
+                "- Max cycles reached\n"
+                "- Diminishing returns (3+ cycles with no improvement)\n"
+                "- User requests stop\n\n"
+                "TOKEN EFFICIENCY:\n"
+                "- Reuse sub-agent IDs across cycles to maintain context (saves prompt tokens)\n"
+                "- When budget is >75% used, switch to targeted single-change iterations\n"
+                "- When budget is >90% used, do a final review and stop\n\n"
+                "IMPORTANT: Always use report_progress to keep the user informed of iteration progress."
+            )
+        else:
+            system += "\n\n" + (
+                "SELF-ITERATION MODE AVAILABLE\n"
+                "=============================\n"
+                "You have self-iteration tools available. When a user asks you to iterate on, "
+                "improve, or optimize a project, use start_iteration to begin an autonomous "
+                "iteration session. This works for ANY project type.\n\n"
+                "Usage: start_iteration(project_path='projects/my-project')\n"
+                "The system will guide you through discovery, baselining, and iterative improvement."
+            )
 
         return system
 
@@ -216,13 +277,15 @@ class AutonomousOrchestrator:
 
         Keeps the first user message and the last N messages, but ensures
         we never split an assistant tool_use from its following tool_result.
+        Injects a summary of dropped content so the model retains awareness.
         After truncation, runs repair to patch any remaining orphans.
         """
         if len(self.messages) <= max_count:
             return self.messages
 
         # We want to keep messages[:1] + tail. Find a safe cut point in the tail.
-        tail_size = max_count - 1
+        # Reserve 2 slots: first message + context summary
+        tail_size = max_count - 2
         cut = len(self.messages) - tail_size
 
         # Walk forward from cut to find a safe boundary — don't start mid-pair.
@@ -248,7 +311,15 @@ class AutonomousOrchestrator:
             # will follow it in the tail).
             break
 
-        trimmed = self.messages[:1] + self.messages[cut:]
+        # Build a summary of the dropped messages so the model knows what happened
+        dropped = self.messages[1:cut]
+        summary = self._summarize_dropped(dropped)
+
+        trimmed = self.messages[:1]
+        if summary:
+            trimmed.append({"role": "user", "content": summary})
+            trimmed.append({"role": "assistant", "content": "Understood. I have context from the earlier rounds and will continue accordingly."})
+        trimmed.extend(self.messages[cut:])
 
         # Repair any orphaned tool_use/tool_result pairs created by the cut
         old_messages = self.messages
@@ -257,6 +328,70 @@ class AutonomousOrchestrator:
         result = self.messages
         self.messages = old_messages
         return result
+
+    def _summarize_dropped(self, dropped: list[dict]) -> str:
+        """Extract key context from dropped messages to preserve awareness."""
+        tools_used = []
+        user_requests = []
+        progress_notes = []
+
+        for msg in dropped:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "user" and isinstance(content, str):
+                # Capture user messages (skip tool results)
+                text = content.strip()
+                if text and not text.startswith("[Sub-agent") and len(text) < 500:
+                    user_requests.append(text[:200])
+
+            elif role == "assistant" and isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "tool_use":
+                            name = block.get("name", "")
+                            inp = block.get("input", {})
+                            if name == "report_progress":
+                                progress_notes.append(inp.get("message", "")[:200])
+                            elif name not in tools_used:
+                                tools_used.append(name)
+
+            elif role == "user" and isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        result_text = block.get("content", "")
+                        if isinstance(result_text, str) and "error" in result_text.lower():
+                            progress_notes.append(f"Tool error: {result_text[:150]}")
+
+        if not tools_used and not user_requests and not progress_notes:
+            return ""
+
+        parts = ["[CONTEXT FROM EARLIER ROUNDS — messages were truncated to fit context window]"]
+
+        if user_requests:
+            parts.append("User requests/messages:")
+            for req in user_requests[:5]:
+                parts.append(f"  - {req}")
+
+        if progress_notes:
+            parts.append("Progress so far:")
+            for note in progress_notes[:10]:
+                parts.append(f"  - {note}")
+
+        if tools_used:
+            parts.append(f"Tools used: {', '.join(tools_used[:15])}")
+
+        # Include task state for extra context
+        if self.task_state.current_goal:
+            parts.append(f"Current goal: {self.task_state.current_goal}")
+
+        recent_progress = self.task_state.progress_notes[-5:] if self.task_state.progress_notes else []
+        if recent_progress:
+            parts.append("Recent progress notes from task state:")
+            for note in recent_progress:
+                parts.append(f"  - {note}")
+
+        return "\n".join(parts)
 
     # ------------------------------------------------------------------
     # Autonomous loop
@@ -396,16 +531,38 @@ class AutonomousOrchestrator:
                 elif self.subagent_manager.has_running_tasks():
                     # Sub-agents still running, no user input, no completions yet
                     # Wait briefly for a completion or user message before continuing
+                    got_input = False
                     for _ in range(20):  # up to ~5 seconds
                         if not self._user_queue.empty():
+                            got_input = True
                             break
                         if self.subagent_manager._completed_results:
                             break  # Non-destructive peek — collect_completed on next iteration
                         if self._cancel_event.is_set() or not self._pause_event.is_set():
                             break
                         await asyncio.sleep(0.25)
-                    # Loop back to top to re-drain queues and completions
-                    continue
+
+                    if got_input:
+                        # User sent a message — drain it and make an API call
+                        # so the orchestrator stays responsive during delegation
+                        queued = []
+                        while not self._user_queue.empty():
+                            try:
+                                queued.append(self._user_queue.get_nowait())
+                            except asyncio.QueueEmpty:
+                                break
+                        if queued:
+                            active = list(self.subagent_manager._background_tasks.keys())
+                            context = "\n\n".join(queued)
+                            if active:
+                                context += f"\n\n[Sub-agents still running: {', '.join(active)}]"
+                            self.messages.append({"role": "user", "content": context})
+                            # Fall through to API call below
+                        else:
+                            continue
+                    else:
+                        # No user input — loop back to re-drain queues and completions
+                        continue
                 else:
                     # No sub-agents, no user input — wait for a new user message
                     await _safe_send(WSMessage(
@@ -607,7 +764,7 @@ class AutonomousOrchestrator:
                         content=f"Launching {len(delegation_calls)} sub-agent(s) in background: {', '.join(agent_ids)}",
                     ))
 
-                    for tc in delegation_calls:
+                    for i, tc in enumerate(delegation_calls):
                         inp = dict(tc.input)
                         agent_id = inp.get("agent_id", "default")
 
@@ -620,6 +777,10 @@ class AutonomousOrchestrator:
                         self.subagent_manager.spawn_background(
                             agent_id, inp["prompt"], inp.get("system", ""), send_and_record
                         )
+
+                        # Stagger sub-agent launches to avoid rate limit bursts
+                        if i < len(delegation_calls) - 1:
+                            await asyncio.sleep(2)
 
                         tool_results.append({
                             "type": "tool_result",
@@ -683,38 +844,53 @@ class AutonomousOrchestrator:
             ))
 
         async with self._rate_limiter:
-            try:
-                response = await stream_and_collect(
-                    messages=self.messages,
-                    system=self._build_system_prompt(),
-                    tools=ORCHESTRATOR_TOOLS,
-                    on_text=on_text,
-                )
-            except RuntimeError as exc:
-                err_str = str(exc)
-                if "429" in err_str or "rate" in err_str.lower():
-                    log.warning("Orchestrator hit rate limit, backing off 5s")
-                    await asyncio.sleep(5)
+            max_retries = 5
+            for attempt in range(max_retries + 1):
+                try:
                     response = await stream_and_collect(
                         messages=self.messages,
                         system=self._build_system_prompt(),
                         tools=ORCHESTRATOR_TOOLS,
                         on_text=on_text,
                     )
-                elif "tool_use_id" in err_str or "tool id" in err_str.lower() or "not found" in err_str.lower():
-                    log.warning("Tool ID mismatch — repairing messages and retrying: %s", err_str[:200])
-                    self._repair_messages()
-                    response = await stream_and_collect(
-                        messages=self.messages,
-                        system=self._build_system_prompt(),
-                        tools=ORCHESTRATOR_TOOLS,
-                        on_text=on_text,
-                    )
-                else:
-                    raise
+                    break  # success
+                except RuntimeError as exc:
+                    err_str = str(exc)
+                    if "429" in err_str or "rate" in err_str.lower():
+                        if attempt >= max_retries:
+                            raise
+                        backoff = min(5 * (2 ** attempt), 60)  # 5s, 10s, 20s, 40s, 60s
+                        log.warning(
+                            "Orchestrator hit rate limit (attempt %d/%d), backing off %ds",
+                            attempt + 1, max_retries, backoff,
+                        )
+                        await asyncio.sleep(backoff)
+                        collected_text.clear()  # reset partial text on retry
+                        continue
+                    elif "tool_use_id" in err_str or "tool id" in err_str.lower() or "not found" in err_str.lower():
+                        log.warning("Tool ID mismatch — repairing messages and retrying: %s", err_str[:200])
+                        self._repair_messages()
+                        response = await stream_and_collect(
+                            messages=self.messages,
+                            system=self._build_system_prompt(),
+                            tools=ORCHESTRATOR_TOOLS,
+                            on_text=on_text,
+                        )
+                        break
+                    else:
+                        raise
 
         full_text = "".join(collected_text)
         if full_text.strip():
             text_parts.append(full_text)
+
+        # Track token usage for iteration budget
+        if iteration_engine.is_active and response.usage:
+            total_tokens = (
+                response.usage.get("input_tokens", 0)
+                + response.usage.get("output_tokens", 0)
+            )
+            if total_tokens:
+                iteration_engine.add_token_usage(total_tokens)
 
         return response

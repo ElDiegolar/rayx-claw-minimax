@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from config import Settings
+from iteration_engine import iteration_engine
 from storage import MemoryStore
 
 log = logging.getLogger(__name__)
@@ -169,7 +170,9 @@ TOOL_DEFINITIONS = [
             "Commands run in the workspace directory by default. Use this to "
             "start servers, run scripts, install packages, run tests, git operations, etc. "
             "Commands have a timeout (default 30s, max 300s). For long-running processes "
-            "like servers, use background the command with &."
+            "like servers, background the command with &. "
+            "IMPORTANT: All commands are sandboxed to the project workspace folder. "
+            "You cannot access files or directories outside the workspace."
         ),
         "input_schema": {
             "type": "object",
@@ -245,6 +248,147 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "start_iteration",
+        "description": (
+            "Start a self-iteration session on a project folder. The agent will autonomously "
+            "analyze the project, determine success metrics, and iteratively improve it. "
+            "The system spins up a discovery team to understand the project before iterating. "
+            "Works for ANY project type: trading bots, web apps, ML models, APIs, CLI tools, etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Path to the project folder (relative to workspace, e.g. 'projects/trading-forge')",
+                },
+                "max_cycles": {
+                    "type": "integer",
+                    "description": "Maximum iteration cycles (default from config, typically 50)",
+                },
+                "token_budget": {
+                    "type": "integer",
+                    "description": "Max tokens to spend on this iteration session (default 5M)",
+                },
+            },
+            "required": ["project_path"],
+        },
+    },
+    {
+        "name": "stop_iteration",
+        "description": "Stop the active self-iteration session. Preserves all metrics history and state.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for stopping (e.g. 'user_requested', 'target_reached', 'diminishing_returns')",
+                    "default": "user_requested",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "iteration_status",
+        "description": (
+            "Get the current status of the self-iteration session including cycle count, "
+            "token budget usage, metrics history, and active phase."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "set_iteration_plan",
+        "description": (
+            "Set the iteration plan after the discovery phase. Defines project type, "
+            "success metrics, run commands, and iteration strategies."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "type": "object",
+                    "description": (
+                        "The iteration plan object with fields: project_type, description, "
+                        "success_metrics (array of {name, direction, how}), run_command, "
+                        "test_command, iteration_strategies (array), constraints (array)"
+                    ),
+                },
+            },
+            "required": ["plan"],
+        },
+    },
+    {
+        "name": "record_iteration_metrics",
+        "description": (
+            "Record metrics for the current iteration cycle. Call after running the project "
+            "and extracting performance data. Include whether changes were kept or reverted."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "metrics": {
+                    "type": "object",
+                    "description": "Key-value pairs of metric names and their measured values",
+                },
+                "changes_summary": {
+                    "type": "string",
+                    "description": "Brief description of what was changed this cycle",
+                },
+                "kept": {
+                    "type": "boolean",
+                    "description": "Whether the changes were kept (true) or reverted (false)",
+                },
+            },
+            "required": ["metrics"],
+        },
+    },
+    {
+        "name": "advance_iteration_cycle",
+        "description": (
+            "Advance to the next iteration cycle. Checks token budget and max cycles. "
+            "Call this after recording metrics and deciding to continue iterating."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "iteration_checkpoint",
+        "description": "Create a git checkpoint for the current iteration state, enabling revert if needed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "description": "Optional label for the checkpoint",
+                    "default": "",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "iteration_revert",
+        "description": "Revert the project to a previous iteration checkpoint.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "cycle": {
+                    "type": "integer",
+                    "description": "Cycle number to revert to. Omit to revert the last change.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "delegate_to_subagent",
         "description": (
             "Delegate a task to a named MiniMax sub-agent. Each agent_id maintains its own "
@@ -282,6 +426,9 @@ ORCHESTRATOR_TOOL_NAMES = {
     "read_file", "write_file", "list_directory", "search_files", "grep_files",
     "run_command", "save_memory", "recall_memory", "delete_memory",
     "report_progress", "mark_complete", "delegate_to_subagent", "check_subagents",
+    "start_iteration", "stop_iteration", "iteration_status", "set_iteration_plan",
+    "record_iteration_metrics", "advance_iteration_cycle",
+    "iteration_checkpoint", "iteration_revert",
 }
 SUBAGENT_TOOL_NAMES = {
     "read_file", "write_file", "list_directory", "search_files", "grep_files",
@@ -480,6 +627,15 @@ BLOCKED_COMMANDS = re.compile(
     re.IGNORECASE,
 )
 
+# Patterns that attempt to escape the workspace via absolute paths or traversal
+_ESCAPE_PATTERNS = re.compile(
+    r"(?:"
+    r"(?:^|[\s;&|`$(])/(?!dev/null|tmp\b)"  # absolute paths (allow /dev/null, /tmp)
+    r"|\.\./"                                 # directory traversal
+    r")",
+)
+
+
 def _run_command(command: str, cwd: str = ".", timeout: int = 30) -> str:
     import subprocess
 
@@ -487,6 +643,23 @@ def _run_command(command: str, cwd: str = ".", timeout: int = 30) -> str:
         return "Error: command blocked by safety filter"
 
     workspace = Path(settings.workspace).resolve()
+
+    # Block commands that reference paths outside the workspace
+    if _ESCAPE_PATTERNS.search(command):
+        # Allow if the absolute path is actually inside the workspace
+        abs_paths = re.findall(r'(?:^|[\s;&|`$(])(/[^\s;&|`$)]+)', command)
+        for ap in abs_paths:
+            ap_clean = ap.strip("'\"")
+            if ap_clean in ("/dev/null",) or ap_clean.startswith("/tmp"):
+                continue
+            try:
+                Path(ap_clean).resolve().relative_to(workspace)
+            except ValueError:
+                return (
+                    f"Error: command references path outside workspace ({ap_clean}). "
+                    f"All operations must stay within {workspace}"
+                )
+
     cwd_path = Path(cwd)
     if cwd_path.is_absolute():
         resolved_cwd = cwd_path.resolve()
@@ -511,6 +684,7 @@ def _run_command(command: str, cwd: str = ".", timeout: int = 30) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
+            env={**os.environ, "HOME": str(workspace)},  # constrain HOME
         )
 
         output_parts = []
@@ -566,9 +740,34 @@ def execute_tool(name: str, tool_input: dict) -> str:
     elif name == "delete_memory":
         return memory_store.delete(tool_input["key"])
     elif name == "report_progress":
-        return f"Progress reported: {tool_input['message']}"
+        return f"Progress reported: {tool_input.get('message', 'No message provided')}"
     elif name == "mark_complete":
-        return f"Task marked complete: {tool_input['summary']}"
+        return f"Task marked complete: {tool_input.get('summary', 'Task completed')}"
+    # Iteration tools
+    elif name == "start_iteration":
+        return iteration_engine.start(
+            tool_input["project_path"],
+            max_cycles=tool_input.get("max_cycles"),
+            token_budget=tool_input.get("token_budget"),
+        )
+    elif name == "stop_iteration":
+        return iteration_engine.stop(tool_input.get("reason", "user_requested"))
+    elif name == "iteration_status":
+        return iteration_engine.get_status()
+    elif name == "set_iteration_plan":
+        return iteration_engine.set_plan(tool_input["plan"])
+    elif name == "record_iteration_metrics":
+        return iteration_engine.record_metrics(
+            tool_input["metrics"],
+            tool_input.get("changes_summary", ""),
+            tool_input.get("kept", True),
+        )
+    elif name == "advance_iteration_cycle":
+        return iteration_engine.advance_cycle()
+    elif name == "iteration_checkpoint":
+        return iteration_engine.create_checkpoint(tool_input.get("label", ""))
+    elif name == "iteration_revert":
+        return iteration_engine.revert_to_checkpoint(tool_input.get("cycle"))
     else:
         return f"Unknown tool: {name}"
 

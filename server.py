@@ -89,16 +89,22 @@ async def tool_status():
             statuses["minimax"] = {
                 "ok": r.status_code < 500,
                 "label": "MiniMax",
-                "desc": "MiniMax M2.5 — autonomous orchestrator + sub-agents",
+                "desc": "MiniMax M2.7 — autonomous orchestrator + sub-agents",
             }
     except Exception:
         statuses["minimax"] = {
             "ok": False,
             "label": "MiniMax",
-            "desc": "MiniMax M2.5 — autonomous orchestrator + sub-agents",
+            "desc": "MiniMax M2.7 — autonomous orchestrator + sub-agents",
         }
 
     return statuses
+
+
+@app.get("/api/iteration", dependencies=[Depends(require_auth)])
+async def iteration_status():
+    from iteration_engine import iteration_engine
+    return iteration_engine.state.to_dict()
 
 
 @app.websocket("/ws")

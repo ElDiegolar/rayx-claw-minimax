@@ -152,6 +152,12 @@ class TaskStateStore:
         _ensure_data_dir()
         self._state: TaskState = self._load()
 
+    def __getattr__(self, name: str):
+        """Proxy attribute access to the underlying TaskState."""
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._state, name)
+
     def _load(self) -> TaskState:
         if not TASK_STATE_FILE.exists():
             return TaskState()

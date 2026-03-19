@@ -45,7 +45,7 @@ class WSMessage(BaseModel):
     type: Literal[
         "chunk", "status", "error", "done", "tool_use", "tool_result",
         "history", "progress", "subagent_event", "task_state", "persona_update",
-        "await_confirm"
+        "await_confirm", "iteration_state"
     ]
     agent: Agent
     content: str = ""

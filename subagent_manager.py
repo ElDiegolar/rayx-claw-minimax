@@ -6,6 +6,7 @@ import logging
 from typing import Awaitable, Callable
 
 from config import Settings
+from iteration_engine import iteration_engine
 from minimax_api import stream_and_collect
 from models import Agent, WSMessage
 from rate_limiter import RateLimiter
@@ -80,26 +81,50 @@ class SubAgent:
                     tool_name=self.agent_id,
                 ))
 
-            async with self._rate_limiter:
-                try:
-                    response = await stream_and_collect(
-                        messages=self.messages,
-                        system=self._system or "",
-                        tools=SUBAGENT_TOOLS,
-                        on_text=_on_text,
-                    )
-                except RuntimeError as exc:
-                    err_str = str(exc)
-                    if "429" in err_str or "rate" in err_str.lower():
-                        log.warning("Sub-agent [%s] hit rate limit, backing off", self.agent_id)
-                        await asyncio.sleep(5)
-                        continue  # retry without incrementing round_num
-                    if "tool_use_id" in err_str or "tool id" in err_str.lower() or "not found" in err_str.lower():
-                        log.warning("Sub-agent [%s] tool ID mismatch, skipping round: %s", self.agent_id, err_str[:200])
-                        break  # exit tool loop — can't recover sub-agent context easily
-                    raise
+            rate_retries = 0
+            max_rate_retries = 5
+            while rate_retries <= max_rate_retries:
+                async with self._rate_limiter:
+                    try:
+                        response = await stream_and_collect(
+                            messages=self.messages,
+                            system=self._system or "",
+                            tools=SUBAGENT_TOOLS,
+                            on_text=_on_text,
+                        )
+                        break  # success
+                    except RuntimeError as exc:
+                        err_str = str(exc)
+                        if "429" in err_str or "rate" in err_str.lower():
+                            rate_retries += 1
+                            if rate_retries > max_rate_retries:
+                                log.error("Sub-agent [%s] rate limit exhausted after %d retries", self.agent_id, max_rate_retries)
+                                raise
+                            backoff = min(5 * (2 ** (rate_retries - 1)), 60)
+                            log.warning(
+                                "Sub-agent [%s] hit rate limit (attempt %d/%d), backing off %ds",
+                                self.agent_id, rate_retries, max_rate_retries, backoff,
+                            )
+                            round_text_parts.clear()
+                            await asyncio.sleep(backoff)
+                            continue
+                        if "tool_use_id" in err_str or "tool id" in err_str.lower() or "not found" in err_str.lower():
+                            log.warning("Sub-agent [%s] tool ID mismatch, skipping round: %s", self.agent_id, err_str[:200])
+                            return full_text  # exit cleanly
+                        raise
+            else:
+                break  # exhausted retries, exit the tool loop
 
             round_num += 1
+
+            # Track token usage for iteration budget
+            if iteration_engine.is_active and response.usage:
+                total_tokens = (
+                    response.usage.get("input_tokens", 0)
+                    + response.usage.get("output_tokens", 0)
+                )
+                if total_tokens:
+                    iteration_engine.add_token_usage(total_tokens)
 
             full_text += "".join(round_text_parts)
             # Preserve full content (including thinking blocks) for round-trip
